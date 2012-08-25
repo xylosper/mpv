@@ -1515,7 +1515,7 @@ static int mp_property_ass_use_margins(m_option_t *prop, int action,
             return M_PROPERTY_ERROR;
     case M_PROPERTY_STEP_UP:
     case M_PROPERTY_STEP_DOWN:
-        mpctx->osd->ass_force_reload = true;
+        vo_osd_changed(OSDTYPE_SUBTITLE);
     default:
         return m_property_flag(prop, action, arg, &opts->ass_use_margins);
     }
@@ -1533,8 +1533,7 @@ static int mp_property_ass_vsfilter_aspect_compat(m_option_t *prop, int action,
             return M_PROPERTY_ERROR;
     case M_PROPERTY_STEP_UP:
     case M_PROPERTY_STEP_DOWN:
-        //has to re-render subs with new aspect ratio
-        mpctx->osd->ass_force_reload = 1;
+        vo_osd_changed(OSDTYPE_SUBTITLE);
     default:
         return m_property_flag(prop, action, arg,
                                &mpctx->opts.ass_vsfilter_aspect_compat);
@@ -1577,10 +1576,8 @@ static int mp_property_sub_scale(m_option_t *prop, int action, void *arg,
             return M_PROPERTY_ERROR;
         M_PROPERTY_CLAMP(prop, *(float *) arg);
 #ifdef CONFIG_ASS
-        if (opts->ass_enabled) {
+        if (opts->ass_enabled)
             opts->ass_font_scale = *(float *) arg;
-            mpctx->osd->ass_force_reload = true;
-        }
 #endif
         text_font_scale_factor = *(float *) arg;
         vo_osd_resized();
@@ -1592,7 +1589,6 @@ static int mp_property_sub_scale(m_option_t *prop, int action, void *arg,
             opts->ass_font_scale += (arg ? *(float *) arg : 0.1) *
                               (action == M_PROPERTY_STEP_UP ? 1.0 : -1.0);
             M_PROPERTY_CLAMP(prop, opts->ass_font_scale);
-            mpctx->osd->ass_force_reload = true;
         }
 #endif
         text_font_scale_factor += (arg ? *(float *) arg : 0.1) *
