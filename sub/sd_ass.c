@@ -192,3 +192,12 @@ struct sh_sub *sd_ass_create_from_track(struct ass_track *track,
     };
     return sh;
 }
+
+struct ass_track *sub_get_ass_track(struct sh_sub *sh)
+{
+    if (sh && sh->sd_driver == &sd_ass && sh->context) {
+        struct sd_ass_priv *ctx = sh->context;
+        return ctx->ass_track;
+    }
+    return NULL;
+}
