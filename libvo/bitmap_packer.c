@@ -148,8 +148,11 @@ int packer_pack(struct bitmap_packer *packer)
             packer->w = FFMIN(packer->w * 2, packer->w_max);
         else if (packer->h != packer->h_max)
             packer->h = FFMIN(packer->h * 2, packer->h_max);
-        else
+        else {
+            packer->w = w_orig;
+            packer->h = h_orig;
             return -1;
+        }
     }
 }
 
@@ -188,13 +191,16 @@ static int packer_pack_from_assimg(struct bitmap_packer *packer,
 int packer_pack_from_subbitmaps(struct bitmap_packer *packer,
                                 struct sub_bitmaps *b, int padding_pixels)
 {
-    packer->padding = padding_pixels;
-    packer_set_size(packer, b->part_count);
+    packer->padding = 0;
+    packer->count = 0;
+    if (b->type == SUBBITMAP_EMPTY)
+        return 0;
     if (b->type == SUBBITMAP_LIBASS)
         return packer_pack_from_assimg(packer, b->imgs);
+    packer->padding = padding_pixels;
+    packer_set_size(packer, b->part_count);
     int a = packer->padding;
     for (int i = 0; i < b->part_count; i++)
         packer->in[i] = (struct pos){b->parts[i].w + a, b->parts[i].h + a};
     return packer_pack(packer);
 }
-
