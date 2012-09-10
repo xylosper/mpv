@@ -52,7 +52,7 @@ struct sh_sub *sd_ass_create_from_track(struct ass_track *track,
                                         struct MPOpts *opts);
 
 #ifdef CONFIG_ASS
-struct ass_track *sub_get_ass_track(struct sh_sub *sh);
+struct ass_track *sub_get_ass_track(struct osd_state *osd);
 #endif
 
 #endif

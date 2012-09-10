@@ -2362,19 +2362,22 @@ void run_command(MPContext *mpctx, mp_cmd_t *cmd)
         if (sh_video) {
             int movement = cmd->args[0].v.i;
             struct track *track = mpctx->current_track[STREAM_SUB];
-            if (track && track->subdata)
+            bool available = false;
+            if (track && track->subdata) {
+                available = true;
                 step_sub(track->subdata, mpctx->video_pts, movement);
+            }
 #ifdef CONFIG_ASS
-            struct sh_sub *sh = mpctx->sh_sub ? mpctx->sh_sub : track->sh_sub;
-            if (sh) {
-                struct ass_track *ass_track = sub_get_ass_track(sh);
-                if (ass_track)
-                    sub_delay += ass_step_sub(ass_track,
-                        (mpctx->video_pts + sub_delay) * 1000 + .5, movement) / 1000.;
+            struct ass_track *ass_track = sub_get_ass_track(mpctx->osd);
+            if (ass_track) {
+                available = true;
+                sub_delay += ass_step_sub(ass_track,
+                  (mpctx->video_pts + sub_delay) * 1000 + .5, movement) / 1000.;
             }
 #endif
-            set_osd_tmsg(mpctx, OSD_MSG_SUB_DELAY, 1, osd_duration,
-                         "Sub delay: %d ms", ROUND(sub_delay * 1000));
+            if (available)
+                set_osd_tmsg(mpctx, OSD_MSG_SUB_DELAY, 1, osd_duration,
+                             "Sub delay: %d ms", ROUND(sub_delay * 1000));
         }
         break;
 
