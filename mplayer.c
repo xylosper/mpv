@@ -3046,13 +3046,11 @@ int seek_chapter(struct MPContext *mpctx, int chapter, double *seek_pts)
         mpctx->last_chapter_pts = *seek_pts;
         return chapter;
     }
-    // for DVD
-    if (mpctx->sh_video) {
-        struct demuxer *demuxer = mpctx->sh_video->ds->demuxer;
-        int res = demuxer_seek_chapter(demuxer, chapter, seek_pts);
+    if (mpctx->master_demuxer) {
+        int res = demuxer_seek_chapter(mpctx->master_demuxer, chapter, seek_pts);
         if (res >= 0) {
             if (*seek_pts == -1)
-                seek_reset(mpctx, true, true);
+                seek_reset(mpctx, true, true);  // for DVD
             else {
                 mpctx->last_chapter_seek = res;
                 mpctx->last_chapter_pts = *seek_pts;
