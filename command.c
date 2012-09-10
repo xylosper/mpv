@@ -925,7 +925,7 @@ static struct track* track_next(struct MPContext *mpctx, enum stream_type type,
             } else {
                 if (seen && !next) {
                     next = cur;
-                } else if (!seen) {
+                } else if (!seen || !track) {
                     prev = cur;
                 }
             }
@@ -968,13 +968,17 @@ static int property_switch_track(m_option_t *prop, int action, void *arg,
         return M_PROPERTY_OK;
 
     case M_PROPERTY_STEP_UP:
-    case M_PROPERTY_SET:
+    case M_PROPERTY_STEP_DOWN:
+    case M_PROPERTY_SET: {
+        int i = (arg ? *((int *) arg) : +1) *
+                (action == M_PROPERTY_STEP_DOWN ? -1 : +1);
         if (action == M_PROPERTY_SET && arg)
-            track = mp_track_by_tid(mpctx, type, *((int *) arg));
+            track = mp_track_by_tid(mpctx, type, i);
         else
-            track = track_next(mpctx, type, +1, track);
+            track = track_next(mpctx, type, i > 0 ? +1 : -1, track);
         mp_switch_track(mpctx, type, track);
         return M_PROPERTY_OK;
+    }
     default:
         return M_PROPERTY_NOT_IMPLEMENTED;
     }
