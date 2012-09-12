@@ -3505,7 +3505,7 @@ static struct track *select_track(struct MPContext *mpctx,
             pick = track;
     }
     if (pick && !select_fallback && !pick->is_external
-        && match_lang(langs, pick->lang) && !pick->default_track)
+        && !match_lang(langs, pick->lang) && !pick->default_track)
         pick = NULL;
     return pick;
 }
