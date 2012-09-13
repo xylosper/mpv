@@ -743,9 +743,6 @@ int cddb_resolve(const char *dev, char **xmcd_file)
         home_dir = getenv("USERPROFILE");
     if (home_dir == NULL)
         home_dir = getenv("HOMEPATH");
-    // Last resort, store the cddb cache in the mplayer directory
-    if (home_dir == NULL)
-        home_dir = (char *)get_path("");
 #endif
     if (home_dir == NULL) {
         cddb_data.cache_dir = NULL;

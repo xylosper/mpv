@@ -253,6 +253,7 @@ SRCS_COMMON = asxparser.c \
               osdep/io.c \
               osdep/$(GETCH) \
               osdep/$(TIMER) \
+              osdep/$(CONFIGPATH) \
               stream/open.c \
               stream/stream.c \
               stream/stream_ffmpeg.c \

@@ -24,7 +24,16 @@
 #include <stdbool.h>
 #include "bstr.h"
 
-char *get_path(const char *filename);
+struct path_list {
+    char **paths;
+    int num_paths;
+};
+
+// Return the path to the given config file or config sub directory.
+// Equals to: mp_path_join(config_dir, sub_path)
+char *mp_get_config_file_path(const char *sub_path);
+
+struct path_list *mp_get_system_config_file_paths(const char *sub_path);
 
 // Return pointer to filename part of path
 
@@ -43,5 +52,8 @@ char *mp_path_join(void *talloc_ctx, struct bstr p1, struct bstr p2);
 
 bool mp_path_exists(const char *path);
 bool mp_path_isdir(const char *path);
+
+// Like mkdir -p
+void mp_mkdir_recursive(const char *path, int mode);
 
 #endif /* MPLAYER_PATH_H */

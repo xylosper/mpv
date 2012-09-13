@@ -37,6 +37,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include "talloc.h"
 #include "af.h"
 #include "path.h"
 
@@ -136,16 +137,16 @@ static int control(struct af_instance_s* af, int cmd, void* arg)
     char *str = arg;
 
     if (!str){
-      free(s->filename);
+      talloc_free(s->filename);
 
-      s->filename = get_path(SHARED_FILE);
+      s->filename = mp_get_config_file_path(SHARED_FILE);
       return AF_OK;
     }
 
     while((str[i]) && (str[i] != ':'))
       i++;
 
-    free(s->filename);
+    talloc_free(s->filename);
 
     s->filename = calloc(i + 1, 1);
     memcpy(s->filename, str, i);
@@ -190,7 +191,7 @@ static void uninit( struct af_instance_s* af )
     if(s->fd > -1)
       close(s->fd);
 
-    free(s->filename);
+    talloc_free(s->filename);
 
     free(af->setup);
     af->setup = NULL;
@@ -257,7 +258,7 @@ static int af_open( af_instance_t* af )
   if((af->data == NULL) || (af->setup == NULL))
     return AF_ERROR;
 
-  ((af_export_t *)af->setup)->filename = get_path(SHARED_FILE);
+  ((af_export_t *)af->setup)->filename = mp_get_config_file_path(SHARED_FILE);
 
   return AF_OK;
 }

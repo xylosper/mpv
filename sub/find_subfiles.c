@@ -225,10 +225,9 @@ char **find_text_subtitles(struct MPOpts *opts, const char *fname)
     }
 
     // Load subtitles in ~/.mplayer/sub limiting sub fuzziness
-    char *mp_subdir = get_path("sub/");
-    if (mp_subdir)
-        append_dir_subtitles(opts, &slist, &n, bstr0(mp_subdir), fname, 1);
-    free(mp_subdir);
+    char *mp_subdir = mp_get_config_file_path("sub/");
+    append_dir_subtitles(opts, &slist, &n, bstr0(mp_subdir), fname, 1);
+    talloc_free(mp_subdir);
 
     // Sort subs by priority and append them
     qsort(slist, n, sizeof(*slist), compare_sub_priority);
@@ -265,13 +264,11 @@ char **find_vob_subtitles(struct MPOpts *opts, const char *fname)
     }
 
     // Potential vobsub in ~/.mplayer/sub
-    char *mp_subdir = get_path("sub/");
-    if (mp_subdir) {
-        MP_GROW_ARRAY(vobs, n);
-        vobs[n++] = mp_path_join(vobs, bstr0(mp_subdir), bname);
-    }
+    char *mp_subdir = mp_get_config_file_path("sub/");
+    MP_GROW_ARRAY(vobs, n);
+    vobs[n++] = mp_path_join(vobs, bstr0(mp_subdir), bname);
+    talloc_free(mp_subdir);
 
-    free(mp_subdir);
     MP_RESIZE_ARRAY(NULL, vobs, n);
     return vobs;
 }

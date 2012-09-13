@@ -1253,7 +1253,8 @@
     output driver.
 
 --no-config=<options>
-    Do not parse selected configuration files.
+    Do not load user configuration file ``config``. This doesn't affect the
+    loading of any other configuration files.
 
     *NOTE*: If ``--include`` or ``--use-filedir-conf`` options are specified
     at the command line, they will be honoured.

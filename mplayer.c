@@ -758,34 +758,33 @@ static int cfg_include(struct m_config *conf, char *filename)
 
 static bool parse_cfgfiles(struct MPContext *mpctx, m_config_t *conf)
 {
-    struct MPOpts *opts = &mpctx->opts;
-    char *conffile;
-    int conffile_fd;
-    if (!(opts->noconfig & 2) &&
-        m_config_parse_config_file(conf, MPLAYER_CONFDIR "/mplayer.conf") < 0)
-        return false;
-    if ((conffile = get_path("")) == NULL)
-        mp_tmsg(MSGT_CPLAYER, MSGL_WARN, "Cannot find HOME directory.\n");
-    else {
-        mkdir(conffile, 0777);
-        free(conffile);
-        if ((conffile = get_path("config")) == NULL)
-            mp_tmsg(MSGT_CPLAYER, MSGL_ERR, "get_path(\"config\") problem\n");
-        else {
-            if ((conffile_fd = open(conffile, O_CREAT | O_EXCL | O_WRONLY,
-                        0666)) != -1) {
-                mp_tmsg(MSGT_CPLAYER, MSGL_INFO,
-                        "Creating config file: %s\n", conffile);
-                write(conffile_fd, DEF_CONFIG, sizeof(DEF_CONFIG) - 1);
-                close(conffile_fd);
-            }
-            if (!(opts->noconfig & 1) &&
-                m_config_parse_config_file(conf, conffile) < 0)
-                return false;
-            free(conffile);
+    bool success = true;
+
+    if (!(mpctx->opts.noconfig & 2)) {
+        struct path_list *list = mp_get_system_config_file_paths("config");
+        // The most important config dir is located at list->paths[0]. Load it
+        // last, as loading a config file always overrides previous settings.
+        for (int n = list->num_paths - 1; n >= 0; n--) {
+            success &= m_config_parse_config_file(conf, list->paths[n]) >= 0;
         }
+        talloc_free(list);
     }
-    return true;
+
+    char *confpath = mp_get_config_file_path(NULL);
+    mp_mkdir_recursive(confpath, 0700);
+    talloc_free(confpath);
+
+    char *conffile = mp_get_config_file_path("config");
+    int conffile_fd = open(conffile, O_CREAT | O_EXCL | O_WRONLY, 0600);
+    if (conffile_fd != -1) {
+        mp_msg(MSGT_CPLAYER, MSGL_INFO, "Creating config file: %s\n", conffile);
+        write(conffile_fd, DEF_CONFIG, sizeof(DEF_CONFIG) - 1);
+        close(conffile_fd);
+    }
+    if (!(mpctx->opts.noconfig & 1))
+        success &= m_config_parse_config_file(conf, conffile) >= 0;
+    talloc_free(conffile);
+    return success;
 }
 
 #define PROFILE_CFG_PROTOCOL "protocol."
@@ -866,7 +865,6 @@ static int try_load_config(m_config_t *conf, const char *file)
 
 static void load_per_file_config(m_config_t *conf, const char * const file)
 {
-    char *confpath;
     char cfg[MP_PATH_MAX];
     const char *name;
 
@@ -888,11 +886,9 @@ static void load_per_file_config(m_config_t *conf, const char * const file)
             return;
     }
 
-    if ((confpath = get_path(name)) != NULL) {
-        try_load_config(conf, confpath);
-
-        free(confpath);
-    }
+    char *filename = mp_get_config_file_path(name);
+    try_load_config(conf, filename);
+    talloc_free(filename);
 }
 
 static void load_per_file_options(m_config_t *conf,
@@ -4193,20 +4189,13 @@ static bool handle_help_options(struct MPContext *mpctx)
 
 static bool load_codecs_conf(struct MPContext *mpctx)
 {
-    /* Check codecs.conf. */
-    if (!codecs_file || !parse_codec_cfg(codecs_file)) {
-        char *mem_ptr;
-        if (!parse_codec_cfg(mem_ptr = get_path("codecs.conf"))) {
-            if (!parse_codec_cfg(MPLAYER_CONFDIR "/codecs.conf")) {
-                if (!parse_codec_cfg(NULL))
-                    return false;
-                mp_tmsg(MSGT_CPLAYER, MSGL_V,
-                        "Using built-in default codecs.conf.\n");
-            }
-        }
-        free(mem_ptr); // release the buffer created by get_path()
+    if (codecs_file && parse_codec_cfg(codecs_file))
+        return true;
+    if (parse_codec_cfg(NULL)) {
+        mp_tmsg(MSGT_CPLAYER, MSGL_V, "Using built-in default codecs.conf.\n");
+        return true;
     }
-    return true;
+    return false;
 }
 
 #ifdef PTW32_STATIC_LIB

@@ -1568,26 +1568,14 @@ struct input_ctx *mp_input_init(struct input_conf *input_conf)
                             NULL, NULL);
 #endif
 
-    char *file;
-    char *config_file = input_conf->config_file;
-    file = config_file[0] != '/' ? get_path(config_file) : config_file;
-    if (!file)
-        return ictx;
-
-    if (!parse_config_file(ictx, file)) {
-        // free file if it was allocated by get_path(),
-        // before it gets overwritten
-        if (file != config_file)
-            free(file);
-        // Try global conf dir
-        file = MPLAYER_CONFDIR "/input.conf";
-        if (!parse_config_file(ictx, file))
-            mp_msg(MSGT_INPUT, MSGL_V, "Falling back on default (hardcoded) "
-                   "input config\n");
-    } else {
-        // free file if it was allocated by get_path()
-        if (file != config_file)
-            free(file);
+    if (input_conf->config_file) {
+        char *config_file = mp_get_config_file_path(input_conf->config_file);
+        if (mp_path_exists(config_file)) {
+            if (!parse_config_file(ictx, config_file))
+                mp_msg(MSGT_INPUT, MSGL_V, "Falling back on default (hardcoded)"
+                       " input config\n");
+        }
+        talloc_free(config_file);
     }
 
 #ifdef CONFIG_JOYSTICK

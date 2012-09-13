@@ -244,24 +244,23 @@ void mp_ass_configure(ASS_Renderer *priv, struct MPOpts *opts,
 void mp_ass_configure_fonts(ASS_Renderer *priv)
 {
     char *dir, *path, *family;
-    dir = get_path("fonts");
-    path = get_path("subfont.ttf");
+    dir = mp_get_config_file_path("fonts");
+    path = mp_get_config_file_path("subfont.ttf");
     if (!mp_path_exists(path)) {
-        free(path);
+        talloc_free(path);
         path = NULL;
     }
     if (sub_font_name)
-        family = strdup(sub_font_name);
+        family = sub_font_name;
     else if (font_name)
-        family = strdup(font_name);
+        family = font_name;
     else
-        family = 0;
+        family = NULL;
 
     ass_set_fonts(priv, path, family, 1, NULL, 1);
 
-    free(dir);
-    free(path);
-    free(family);
+    talloc_free(dir);
+    talloc_free(path);
 }
 
 static int map_ass_level[] = {
@@ -287,11 +286,11 @@ static void message_callback(int level, const char *format, va_list va, void *ct
 ASS_Library *mp_ass_init(struct MPOpts *opts)
 {
     ASS_Library *priv;
-    char *path = get_path("fonts");
+    char *path = mp_get_config_file_path("fonts");
     priv = ass_library_init();
     ass_set_message_cb(priv, message_callback, NULL);
     ass_set_fonts_dir(priv, path);
     ass_set_extract_fonts(priv, opts->use_embedded_fonts);
-    free(path);
+    talloc_free(path);
     return priv;
 }

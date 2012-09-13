@@ -777,36 +777,32 @@ dvb_config_t *dvb_get_config(void)
 			continue;
 		}
 
-		conf_file = get_path("channels.conf");
+		conf_file = "channels.conf";
 		switch(type)
 		{
 			case TUNER_TER:
-			conf_file = get_path("channels.conf.ter");
+			conf_file = "channels.conf.ter";
 				break;
 			case TUNER_CBL:
-			conf_file = get_path("channels.conf.cbl");
+			conf_file = "channels.conf.cbl";
 				break;
 			case TUNER_SAT:
-			conf_file = get_path("channels.conf.sat");
+			conf_file = "channels.conf.sat";
 				break;
 			case TUNER_ATSC:
-			conf_file = get_path("channels.conf.atsc");
+			conf_file = "channels.conf.atsc";
 				break;
 		}
+		conf_file = mp_get_config_file_path(conf_file);
 
 		if((access(conf_file, F_OK | R_OK) != 0))
 		{
-			free(conf_file);
-			conf_file = get_path("channels.conf");
-			if((access(conf_file, F_OK | R_OK) != 0))
-			{
-				free(conf_file);
-				conf_file = strdup(MPLAYER_CONFDIR "/channels.conf");
-			}
+			talloc_free(conf_file);
+			conf_file = mp_get_config_file_path("channels.conf");
 		}
 
 		list = dvb_get_channels(conf_file, type);
-		free(conf_file);
+		talloc_free(conf_file);
 		if(list == NULL)
 			continue;
 
