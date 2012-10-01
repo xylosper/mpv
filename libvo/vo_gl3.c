@@ -2232,6 +2232,8 @@ static int preinit(struct vo *vo, const char *arg)
     struct gl_priv *p = talloc_zero(vo, struct gl_priv);
     vo->priv = p;
 
+    MP_MSG(vo, INFO, "Hello from a VO!\n");
+
     *p = (struct gl_priv) {
         .vo = vo,
         .colorspace = MP_CSP_DETAILS_DEFAULTS,

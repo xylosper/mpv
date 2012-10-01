@@ -2333,8 +2333,9 @@ int reinit_video_chain(struct MPContext *mpctx)
     double ar = -1.0;
     //================== Init VIDEO (codec & libvo) ==========================
     if (!opts->fixed_vo || !(mpctx->initialized_flags & INITIALIZED_VO)) {
+        struct mp_log *log = mp_log_get_sub(mpctx->log_base, "vo");
         mpctx->video_out
-            = init_best_video_out(opts, mpctx->key_fifo, mpctx->input,
+            = init_best_video_out(opts, log, mpctx->key_fifo, mpctx->input,
                                   mpctx->encode_lavc_ctx);
         if (!mpctx->video_out) {
             mp_tmsg(MSGT_CPLAYER, MSGL_FATAL, "Error opening/initializing "
@@ -4323,6 +4324,7 @@ int main(int argc, char *argv[])
 
     struct MPContext *mpctx = talloc(NULL, MPContext);
     *mpctx = (struct MPContext){
+        .log_base = talloc_steal(mpctx, mp_log_create()),
         .osd_function = OSD_PLAY,
         .begin_skip = MP_NOPTS_VALUE,
         .file_format = DEMUXER_TYPE_UNKNOWN,
@@ -4334,6 +4336,9 @@ int main(int argc, char *argv[])
     mp_msg_init();
     init_libav();
     screenshot_init(mpctx);
+
+    mpctx->log = mp_log_get_sub(mpctx->log_base, "!cplayer");
+    MP_MSG(mpctx, INFO, "Hello there!\n");
 
     struct MPOpts *opts = &mpctx->opts;
     set_default_mplayer_options(opts);

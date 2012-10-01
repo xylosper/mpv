@@ -142,4 +142,19 @@ void mp_msg(int mod, int lev, const char *format, ... ) PRINTF_ATTRIBUTE(3, 4);
 void mp_tmsg(int mod, int lev, const char *format, ... ) PRINTF_ATTRIBUTE(3, 4);
 #define mp_dbg mp_msg
 
+struct mp_log;
+
+struct mp_log *mp_log_create(void);
+struct mp_log *mp_log_get_sub(struct mp_log *parent, const char *name);
+
+void mp_msg_log(struct mp_log *log, int lev, const char *format, ...) PRINTF_ATTRIBUTE(3, 4);
+void mp_tmsg_log(struct mp_log *log, int lev, const char *format, ...) PRINTF_ATTRIBUTE(3, 4);
+
+#define MP_MSG(obj, lev, ...) mp_msg_log((obj)->log, MSGL_ ## lev, __VA_ARGS__)
+#define MP_MSGT(obj, lev, ...) mp_msgt_log((obj)->log, MSGL_ ## lev, __VA_ARGS__)
+
+// or maybe rather have macros like MP_MSG_WARN(...)?
+// should the MP_ prefix be removed?
+// should the loglevel be stored in mp_log, or passed to MP_MSG()?
+
 #endif /* MPLAYER_MP_MSG_H */

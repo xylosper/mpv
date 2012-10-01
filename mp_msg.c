@@ -31,6 +31,7 @@
 #include <libintl.h>
 #endif
 
+#include "mpcommon.h"
 #include "mp_msg.h"
 
 /* maximum message length of mp_msg */
@@ -305,5 +306,91 @@ void mp_tmsg(int mod, int lev, const char *format, ...)
     va_list va;
     va_start(va, format);
     mp_msg_va(mod, lev, mp_gtext(format), va);
+    va_end(va);
+}
+
+#include "talloc.h"
+
+struct mp_log
+{
+    struct mp_log *parent;
+    struct mp_log **children;
+    int num_children;
+    const char *name;
+    bool print_prefix; // print a "[name]" prefix by default? (for drivers)
+    int loglevel; // corresponds to mp_msg_levels
+    // Also should contain a file stream to print to, or a callback:
+    //...
+};
+
+struct mp_log *mp_log_create(void)
+{
+    struct mp_log *log = talloc_ptrtype(NULL, log);
+    *log = (struct mp_log) { .loglevel = MSGL_STATUS };
+    return log;
+}
+
+struct mp_log *mp_log_get_sub(struct mp_log *parent, const char *name)
+{
+    for (int n = 0; n < parent->num_children; n++) {
+        struct mp_log *child = parent->children[n];
+        if (strcmp(child->name, name) == 0)
+            return child;
+    }
+
+    bool prefix = true;
+    if (name && name[0] == '!') {
+        prefix = false;
+        name = name + 1;
+    }
+
+    struct mp_log *log = talloc_ptrtype(parent, log);
+    *log = (struct mp_log) {
+        .parent = parent,
+        .name = talloc_strdup(log, name),
+        .print_prefix = prefix,
+        .loglevel = MSGL_STATUS,
+    };
+    MP_TARRAY_APPEND(parent, parent->children, parent->num_children, log);
+    return log;
+}
+
+static void print_prefixes(struct mp_log *log, bool add_sep)
+{
+    if (log->print_prefix) {
+        if (log->parent)
+            print_prefixes(log->parent, true);
+        printf("%s", log->name);
+        if (add_sep)
+            printf("/");
+    }
+}
+
+static void mp_msg_log_va(struct mp_log *log, int lev, const char *format,
+                          va_list va)
+{
+    if (log->loglevel < lev)
+        return;
+    if (log->print_prefix) {
+        printf("[");
+        print_prefixes(log, false);
+        printf("] ");
+    }
+    mp_msg_va(MSGT_CPLAYER, lev, format, va);
+}
+
+void mp_msg_log(struct mp_log *log, int lev, const char *format, ...)
+{
+    va_list va;
+    va_start(va, format);
+    mp_msg_log_va(log, lev, format, va);
+    va_end(va);
+}
+
+void mp_tmsg_log(struct mp_log *log, int lev, const char *format, ...)
+{
+    va_list va;
+    va_start(va, format);
+    mp_msg_log_va(log, lev, mp_gtext(format), va);
     va_end(va);
 }

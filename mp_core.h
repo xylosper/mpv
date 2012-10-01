@@ -119,6 +119,8 @@ struct track {
 
 typedef struct MPContext {
     struct MPOpts opts;
+    struct mp_log *log_base;
+    struct mp_log *log; // console player messages
     struct m_config *mconfig;
     struct mp_fifo *key_fifo;
     struct input_ctx *input;

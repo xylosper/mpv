@@ -131,6 +131,7 @@ const struct vo_driver *video_out_drivers[] =
 
 static int vo_preinit(struct vo *vo, char *arg)
 {
+    vo->log = mp_log_get_sub(vo->log, vo->driver->info->short_name);
     if (vo->driver->priv_size) {
         vo->priv = talloc_zero_size(vo, vo->driver->priv_size);
         if (vo->driver->priv_defaults)
@@ -286,6 +287,7 @@ void list_video_out(void)
 }
 
 struct vo *init_best_video_out(struct MPOpts *opts,
+                               struct mp_log *log_parent,
                                struct mp_fifo *key_fifo,
                                struct input_ctx *input_ctx,
                                struct encode_lavc_context *encode_lavc_ctx)
@@ -295,6 +297,7 @@ struct vo *init_best_video_out(struct MPOpts *opts,
     struct vo *vo = talloc_ptrtype(NULL, vo);
     struct vo initial_values = {
         .opts = opts,
+        .log = log_parent,
         .key_fifo = key_fifo,
         .encode_lavc_ctx = encode_lavc_ctx,
         .input_ctx = input_ctx,

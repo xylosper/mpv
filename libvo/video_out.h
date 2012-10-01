@@ -233,6 +233,8 @@ struct vo {
     int config_ok;  // Last config call was successful?
     int config_count;  // Total number of successful config calls
 
+    struct mp_log *log;
+
     bool frame_loaded;  // Is there a next frame the VO could flip to?
     struct mp_image *waiting_mpi;
     double next_pts;    // pts value of the next frame if any
@@ -278,6 +280,7 @@ struct vo {
 };
 
 struct vo *init_best_video_out(struct MPOpts *opts,
+                               struct mp_log *log_parent,
                                struct mp_fifo *key_fifo,
                                struct input_ctx *input_ctx,
                                struct encode_lavc_context *encode_lavc_ctx);
