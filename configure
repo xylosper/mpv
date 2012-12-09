@@ -349,6 +349,7 @@ Video output:
   --enable-gl              enable OpenGL video output [autodetect]
   --enable-caca            enable CACA  video output [autodetect]
   --enable-direct3d        enable Direct3D video output [autodetect]
+  --enable-sdl2            enable SDL2 video output [autodetect]
   --enable-xv              enable Xv video output [autodetect]
   --enable-vdpau           enable VDPAU acceleration [autodetect]
   --enable-vm              enable XF86VidMode support [autodetect]
@@ -423,6 +424,7 @@ _xss=auto
 _xv=auto
 _vdpau=auto
 _direct3d=auto
+_sdl2=auto
 _dsound=auto
 _nas=auto
 _mng=auto
@@ -597,6 +599,8 @@ for ac_option do
   --disable-vdpau)      _vdpau=no       ;;
   --enable-direct3d)    _direct3d=yes   ;;
   --disable-direct3d)   _direct3d=no    ;;
+  --enable-sdl2)        _sdl2=yes       ;;
+  --disable-sdl2)       _sdl2=no        ;;
   --enable-dsound)      _dsound=yes     ;;
   --disable-dsound)     _dsound=no      ;;
   --enable-mng)         _mng=yes        ;;
@@ -2324,6 +2328,29 @@ echores "$_dsound"
 fi #if win32; then
 
 
+echocheck "SDL2"
+if test "$_sdl2" = auto ; then
+  _sdl2=no
+  if ( sdl2-config --version ) >> "$TMPLOG" 2>&1 ; then
+  cat > $TMPC << EOF
+#include <SDL.h>
+int main(void) { SDL_Init(0); return 0; }
+EOF
+  cc_check $(sdl2-config --libs --cflags) && _sdl2=yes
+  fi
+fi
+if test "$_sdl2" = yes ; then
+  def_sdl2='#define CONFIG_SDL2 1'
+  extra_cflags="$extra_cflags $(sdl2-config --cflags)"
+  libs_mplayer="$libs_mplayer $(sdl2-config --libs)"
+  vomodules="sdl2 $vomodules"
+else
+  def_sdl2='#undef CONFIG_SDL2'
+  novomodules="sdl2 $novomodules"
+fi
+echores "$_sdl2"
+
+
 #########
 # AUDIO #
 #########
@@ -3171,6 +3198,7 @@ COCOA = $_cocoa
 COREAUDIO = $_coreaudio
 COREVIDEO = $_corevideo
 DIRECT3D = $_direct3d
+SDL2 = $_sdl2
 DSOUND = $_dsound
 DVBIN = $_dvbin
 DVDREAD = $_dvdread
@@ -3417,6 +3445,7 @@ $def_caca
 $def_corevideo
 $def_cocoa
 $def_direct3d
+$def_sdl2
 $def_dsound
 $def_dvb
 $def_dvbin
