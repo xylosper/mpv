@@ -51,6 +51,7 @@ struct priv {
     SDL_Renderer *renderer;
     SDL_RendererInfo renderer_info;
     SDL_Texture *tex;
+    mp_image_t texmpi;
 };
 
 struct formatmap_entry {
@@ -93,8 +94,8 @@ const struct formatmap_entry formats[] = {
     {SDL_PIXELFORMAT_ABGR8888, IMGFMT_RGBA},
     {SDL_PIXELFORMAT_BGRA8888, IMGFMT_ARGB},
 #endif
-//  {SDL_PIXELFORMAT_YV12, IMGFMT_YV12},
-//  {SDL_PIXELFORMAT_IYUV, IMGFMT_IYUV},
+    {SDL_PIXELFORMAT_YV12, IMGFMT_YV12},
+    {SDL_PIXELFORMAT_IYUV, IMGFMT_IYUV},
     {SDL_PIXELFORMAT_YUY2, IMGFMT_YUY2},
     {SDL_PIXELFORMAT_UYVY, IMGFMT_UYVY},
     {SDL_PIXELFORMAT_YVYU, IMGFMT_YVYU}
@@ -126,6 +127,20 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
         return -1;
     }
     SDL_ShowWindow(vc->window);
+    mp_image_t *texmpi = &vc->texmpi;
+    texmpi->width = texmpi->w = width;
+    texmpi->height = texmpi->h = height;
+    mp_image_setfmt(texmpi, format);
+    switch (texmpi->num_planes) {
+        case 1:
+        case 3:
+            break;
+        default:
+            mp_msg(MSGT_VO, MSGL_ERR, "Invalid plane count in pixel format\n");
+            SDL_DestroyTexture(vc->tex);
+            vc->tex = NULL;
+            return -1;
+    }
     return 0;
 }
 
@@ -244,7 +259,38 @@ static int query_format(struct vo *vo, uint32_t format)
 static void draw_image(struct vo *vo, mp_image_t *mpi, double pts)
 {
     struct priv *vc = vo->priv;
-    SDL_UpdateTexture(vc->tex, NULL, mpi->planes[0], mpi->stride[0]);
+
+    void *pixels;
+    int pitch;
+    if (SDL_LockTexture(vc->tex, NULL, &pixels, &pitch))
+    {
+        mp_msg(MSGT_VO, MSGL_ERR, "Failed to lock texture\n");
+        return;
+    }
+
+    mp_image_t *texmpi = &vc->texmpi;
+    texmpi->planes[0] = pixels;
+    texmpi->stride[0] = pitch;
+    if (texmpi->num_planes == 3) {
+        if (texmpi->imgfmt == IMGFMT_YV12) {
+            texmpi->planes[2] =
+                ((Uint8 *) texmpi->planes[0] + texmpi->h * pitch);
+            texmpi->stride[2] = pitch / 2;
+            texmpi->planes[1] =
+                ((Uint8 *) texmpi->planes[2] + (texmpi->h * pitch) / 4);
+            texmpi->stride[1] = pitch / 2;
+        } else {
+            texmpi->planes[1] =
+                ((Uint8 *) texmpi->planes[0] + texmpi->h * pitch);
+            texmpi->stride[1] = pitch / 2;
+            texmpi->planes[2] =
+                ((Uint8 *) texmpi->planes[1] + (texmpi->h * pitch) / 4);
+            texmpi->stride[2] = pitch / 2;
+        }
+    }
+    copy_mpi(texmpi, mpi);
+    SDL_UnlockTexture(vc->tex);
+
     SDL_RenderCopy(vc->renderer, vc->tex, NULL, NULL);
 }
 
