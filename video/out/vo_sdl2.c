@@ -284,8 +284,17 @@ static void check_events(struct vo *vo)
                                 break;
                             }
                     }
-                    if (keycode)
+                    if (keycode) {
+                        if (ev.key.keysym.mod & (KMOD_LSHIFT | KMOD_RSHIFT))
+                            keycode |= KEY_MODIFIER_SHIFT;
+                        if (ev.key.keysym.mod & (KMOD_LCTRL | KMOD_RCTRL))
+                            keycode |= KEY_MODIFIER_CTRL;
+                        if (ev.key.keysym.mod & (KMOD_LALT | KMOD_RALT))
+                            keycode |= KEY_MODIFIER_ALT;
+                        if (ev.key.keysym.mod & (KMOD_LGUI | KMOD_RGUI))
+                            keycode |= KEY_MODIFIER_META;
                         mplayer_put_key(vo->key_fifo, keycode);
+                    }
                 }
                 break;
             case SDL_MOUSEMOTION:
