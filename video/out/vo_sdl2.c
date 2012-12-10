@@ -49,6 +49,28 @@
 struct priv {
     SDL_Window *window;
     SDL_Renderer *renderer;
+    SDL_RendererInfo renderer_info;
+    SDL_Texture *tex;
+};
+
+struct formatmap_entry {
+    Uint32 sdl;
+    unsigned int mpv;
+};
+const struct formatmap_entry formats[] = {
+    {SDL_PIXELFORMAT_RGB332, IMGFMT_RGB8},
+    {SDL_PIXELFORMAT_RGB444, IMGFMT_RGB12},
+    {SDL_PIXELFORMAT_RGB555, IMGFMT_RGB15},
+    {SDL_PIXELFORMAT_BGR555, IMGFMT_BGR15},
+    {SDL_PIXELFORMAT_RGB565, IMGFMT_RGB16},
+    {SDL_PIXELFORMAT_BGR565, IMGFMT_BGR16},
+    {SDL_PIXELFORMAT_RGB24, IMGFMT_RGB24},
+    {SDL_PIXELFORMAT_BGR24, IMGFMT_BGR24},
+//  {SDL_PIXELFORMAT_YV12, IMGFMT_YV12},
+//  {SDL_PIXELFORMAT_IYUV, IMGFMT_IYUV},
+    {SDL_PIXELFORMAT_YUY2, IMGFMT_YUY2},
+    {SDL_PIXELFORMAT_UYVY, IMGFMT_UYVY},
+    {SDL_PIXELFORMAT_YVYU, IMGFMT_YVYU}
 };
 
 static int config(struct vo *vo, uint32_t width, uint32_t height,
@@ -56,36 +78,34 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
         uint32_t format)
 {
     struct priv *vc = vo->priv;
-    if (vc->renderer) {
-        SDL_DestroyRenderer(vc->renderer);
-        vc->renderer = NULL;
-    }
-    if (vc->window) {
-        SDL_DestroyWindow(vc->window);
-        vc->window = NULL;
-    }
-    Uint32 winflags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
-    if (vo_fs)
-        winflags |= SDL_WINDOW_FULLSCREEN;
-    vc->window = SDL_CreateWindow("MPV",
-            SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, d_width, d_height,
-            winflags);
-    if (!vc->window) {
-        mp_msg(MSGT_VO, MSGL_ERR, "Could not get a SDL2 window");
+    SDL_SetWindowSize(vc->window, d_width, d_height);
+    if (vc->tex)
+        SDL_DestroyTexture(vc->tex);
+    Uint32 texfmt = SDL_PIXELFORMAT_UNKNOWN;
+    int i, j;
+    for (i = 0; i < vc->renderer_info.num_texture_formats; ++i)
+        for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
+            if (vc->renderer_info.texture_formats[i] == formats[j].sdl)
+                if (format == formats[j].mpv)
+                    texfmt = formats[j].sdl;
+    if (texfmt == SDL_PIXELFORMAT_UNKNOWN) {
+        mp_msg(MSGT_VO, MSGL_ERR, "Invalid pixel format\n");
         return -1;
     }
-    vc->renderer = SDL_CreateRenderer(vc->window, -1, 0);
-    if (!vc->renderer) {
-        mp_msg(MSGT_VO, MSGL_ERR, "Could not get a SDL2 renderer");
-        SDL_DestroyWindow(vc->window);
-        vc->window = NULL;
+    vc->tex = SDL_CreateTexture(vc->renderer, texfmt,
+            SDL_TEXTUREACCESS_STREAMING, width, height);
+    if (!vc->tex) {
+        mp_msg(MSGT_VO, MSGL_ERR, "Could not create a SDL2 texture\n");
         return -1;
     }
+    SDL_ShowWindow(vc->window);
     return 0;
 }
 
 static void flip_page_timed(struct vo *vo, unsigned int pts_us, int duration)
 {
+    struct priv *vc = vo->priv;
+    SDL_RenderPresent(vc->renderer);
 }
 
 static void check_events(struct vo *vo)
@@ -95,7 +115,7 @@ static void check_events(struct vo *vo)
 static void uninit(struct vo *vo)
 {
     struct priv *vc = vo->priv;
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_TIMER);
     talloc_free(vc);
     vo->priv = NULL;
 }
@@ -104,30 +124,104 @@ static void draw_osd(struct vo *vo, struct osd_state *osd)
 {
 }
 
+static bool MP_SDL_IsGoodRenderer(int n)
+{
+    SDL_RendererInfo ri;
+    if (SDL_GetRenderDriverInfo(n, &ri))
+        return false;
+    int i, j;
+    for (i = 0; i < ri.num_texture_formats; ++i)
+        for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
+            if (ri.texture_formats[i] == formats[j].sdl)
+                return true;
+    return false;
+}
+
 static int preinit(struct vo *vo, const char *arg)
 {
     struct priv *vc;
     vo->priv = talloc_zero(vo, struct priv);
     vc = vo->priv;
-    if(SDL_WasInit(SDL_INIT_VIDEO)) {
-        mp_msg(MSGT_VO, MSGL_ERR, "SDL2 already initialized");
+
+    if (SDL_WasInit(SDL_INIT_VIDEO)) {
+        mp_msg(MSGT_VO, MSGL_ERR, "SDL2 already initialized\n");
         return -1;
     }
-    SDL_Init(SDL_INIT_VIDEO);
+    if (SDL_VideoInit(NULL)) {
+        mp_msg(MSGT_VO, MSGL_ERR, "SDL_Init failed\n");
+        return -1;
+    }
+
+    vc->window = SDL_CreateWindow("MPV",
+            SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 320, 240,
+            SDL_WINDOW_RESIZABLE);
+    if (!vc->window) {
+        mp_msg(MSGT_VO, MSGL_ERR, "Could not get a SDL2 window\n");
+        return -1;
+    }
+
+    int i;
+    for (i = 0; i < SDL_GetNumRenderDrivers(); ++i) {
+        if (MP_SDL_IsGoodRenderer(i))
+            break;
+    }
+
+    if (i >= SDL_GetNumRenderDrivers()) {
+        mp_msg(MSGT_VO, MSGL_ERR, "No suitable SDL2 renderer\n");
+        return -1;
+    }
+
+    vc->renderer = SDL_CreateRenderer(vc->window, i, 0);
+    if (!vc->renderer) {
+        mp_msg(MSGT_VO, MSGL_ERR, "Could not get a SDL2 renderer\n");
+        SDL_DestroyWindow(vc->window);
+        vc->window = NULL;
+        return -1;
+    }
+
+    if(SDL_GetRendererInfo(vc->renderer, &vc->renderer_info)) {
+        mp_msg(MSGT_VO, MSGL_ERR, "Could not get SDL2 renderer info\n");
+        return 0;
+    }
+
+    // global renderer state - why not set up right now
+    SDL_SetRenderDrawBlendMode(vc->renderer, SDL_BLENDMODE_NONE);
+
     return 0;
 }
 
 static int query_format(struct vo *vo, uint32_t format)
 {
-    return VFCAP_CSP_SUPPORTED; // TODO
+    struct priv *vc = vo->priv;
+    int i, j;
+    mp_msg(MSGT_VO, MSGL_INFO, "Trying format: %08x\n", format);
+    for (i = 0; i < vc->renderer_info.num_texture_formats; ++i)
+        for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
+            if (vc->renderer_info.texture_formats[i] == formats[j].sdl) {
+                if (format == formats[j].mpv) {
+                    mp_msg(MSGT_VO, MSGL_INFO, "Good format found for SDL2\n");
+                    return VFCAP_CSP_SUPPORTED;
+                }
+            }
+    mp_msg(MSGT_VO, MSGL_INFO, "NOT SUPPORTED\n");
+    return 0;
+}
+
+static void draw_image(struct vo *vo, mp_image_t *mpi, double pts)
+{
+    struct priv *vc = vo->priv;
+    SDL_UpdateTexture(vc->tex, NULL, mpi->planes[0], mpi->stride[0]);
+    SDL_RenderCopy(vc->renderer, vc->tex, NULL, NULL);
 }
 
 static int control(struct vo *vo, uint32_t request, void *data)
 {
-    struct priv *vc = vo->priv;
     switch (request) {
         case VOCTRL_QUERY_FORMAT:
             return query_format(vo, *((uint32_t *)data));
+        case VOCTRL_DRAW_IMAGE:
+            draw_image(vo, (mp_image_t *)data, vo->next_pts);
+            return 0;
     }
     return VO_NOTIMPL;
 }
