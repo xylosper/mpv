@@ -40,11 +40,13 @@
 #include "sub/sub.h"
 #include "video/mp_image.h"
 #include "video/vfcap.h"
+#include "aspect.h"
 
 #include "core/input/keycodes.h"
 #include "core/input/input.h"
 #include "core/mp_msg.h"
 #include "core/mp_fifo.h"
+#include "core/options.h"
 
 struct priv {
     SDL_Window *window;
@@ -184,6 +186,7 @@ static void resize(struct vo *vo, int w, int h)
     vo->dheight = h;
     vo_get_src_dst_rects(vo, &vc->src_rect, &vc->dst_rect,
             &vc->osd_res);
+    SDL_RenderSetLogicalSize(vc->renderer, w, h);
 }
 
 static void check_resize(struct vo *vo)
@@ -375,7 +378,7 @@ static int preinit(struct vo *vo, const char *arg)
     }
 
     vc->window = SDL_CreateWindow("MPV",
-            SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 320, 240,
+            SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 480,
             SDL_WINDOW_RESIZABLE);
     if (!vc->window) {
         mp_msg(MSGT_VO, MSGL_ERR, "Could not get a SDL2 window\n");
@@ -493,6 +496,20 @@ static void draw_image(struct vo *vo, mp_image_t *mpi, double pts)
         copy_mpi(vc->ssmpi, mpi);
 }
 
+static void update_screeninfo(struct vo *vo)
+{
+    struct priv *vc = vo->priv;
+    SDL_DisplayMode mode;
+    if (SDL_GetCurrentDisplayMode(SDL_GetWindowDisplay(vc->window), &mode)) {
+        mp_msg(MSGT_VO, MSGL_ERR, "Failed to get display mode\n");
+        return;
+    }
+    struct MPOpts *opts = vo->opts;
+    opts->vo_screenwidth = mode.w;
+    opts->vo_screenheight = mode.h;
+    aspect_save_screenres(vo, opts->vo_screenwidth, opts->vo_screenheight);
+}
+
 static int control(struct vo *vo, uint32_t request, void *data)
 {
     struct priv *vc = vo->priv;
@@ -513,8 +530,8 @@ static int control(struct vo *vo, uint32_t request, void *data)
             draw_image(vo, NULL, MP_NOPTS_VALUE);
             return 1;
         case VOCTRL_UPDATE_SCREENINFO:
-            // TODO
-            break;
+            update_screeninfo(vo);
+            return 1;
     }
     return VO_NOTIMPL;
 }
