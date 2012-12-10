@@ -189,6 +189,14 @@ static void resize(struct vo *vo, int w, int h)
     SDL_RenderSetLogicalSize(vc->renderer, w, h);
 }
 
+static void force_resize(struct vo *vo)
+{
+    struct priv *vc = vo->priv;
+    int w, h;
+    SDL_GetWindowSize(vc->window, &w, &h);
+    resize(vo, w, h);
+}
+
 static void check_resize(struct vo *vo)
 {
     struct priv *vc = vo->priv;
@@ -532,6 +540,11 @@ static int control(struct vo *vo, uint32_t request, void *data)
         case VOCTRL_UPDATE_SCREENINFO:
             update_screeninfo(vo);
             return 1;
+        case VOCTRL_GET_PANSCAN:
+            return VO_TRUE;
+        case VOCTRL_SET_PANSCAN:
+            force_resize(vo);
+            return VO_TRUE;
     }
     return VO_NOTIMPL;
 }
