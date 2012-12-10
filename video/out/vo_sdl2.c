@@ -52,6 +52,7 @@ struct priv {
     SDL_RendererInfo renderer_info;
     SDL_Texture *tex;
     mp_image_t texmpi;
+    mp_image_t *ssmpi;
 };
 
 struct formatmap_entry {
@@ -141,6 +142,7 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
             vc->tex = NULL;
             return -1;
     }
+    vc->ssmpi = alloc_mpi(width, height, format);
     return 0;
 }
 
@@ -157,6 +159,7 @@ static void check_events(struct vo *vo)
 static void uninit(struct vo *vo)
 {
     struct priv *vc = vo->priv;
+    free_mp_image(vc->ssmpi);
     SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_TIMER);
     talloc_free(vc);
     vo->priv = NULL;
@@ -291,7 +294,9 @@ static void draw_image(struct vo *vo, mp_image_t *mpi, double pts)
     copy_mpi(texmpi, mpi);
     SDL_UnlockTexture(vc->tex);
 
+    // typically these two calls will run in parallel
     SDL_RenderCopy(vc->renderer, vc->tex, NULL, NULL);
+    copy_mpi(vc->ssmpi, mpi);
 }
 
 static int control(struct vo *vo, uint32_t request, void *data)
