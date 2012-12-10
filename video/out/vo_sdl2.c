@@ -121,13 +121,14 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
         mp_msg(MSGT_VO, MSGL_ERR, "Invalid pixel format\n");
         return -1;
     }
+
     vc->tex = SDL_CreateTexture(vc->renderer, texfmt,
             SDL_TEXTUREACCESS_STREAMING, width, height);
     if (!vc->tex) {
         mp_msg(MSGT_VO, MSGL_ERR, "Could not create a SDL2 texture\n");
         return -1;
     }
-    SDL_ShowWindow(vc->window);
+
     mp_image_t *texmpi = &vc->texmpi;
     texmpi->width = texmpi->w = width;
     texmpi->height = texmpi->h = height;
@@ -142,8 +143,24 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
             vc->tex = NULL;
             return -1;
     }
+
     vc->ssmpi = alloc_mpi(width, height, format);
+
+    if (SDL_SetWindowFullscreen(vc->window, vo_fs))
+        mp_msg(MSGT_VO, MSGL_ERR, "Cannot initialize fullscreen mode\n");
+    SDL_ShowWindow(vc->window);
+
     return 0;
+}
+
+static void toggle_fullscreen(struct vo *vo)
+{
+    struct priv *vc = vo->priv;
+    vo_fs = !vo_fs;
+    if (SDL_SetWindowFullscreen(vc->window, vo_fs)) {
+        vo_fs = !vo_fs;
+        mp_msg(MSGT_VO, MSGL_ERR, "Cannot toggle fullscreen mode\n");
+    }
 }
 
 static void flip_page(struct vo *vo)
@@ -307,10 +324,12 @@ static int control(struct vo *vo, uint32_t request, void *data)
         case VOCTRL_DRAW_IMAGE:
             draw_image(vo, (mp_image_t *)data, vo->next_pts);
             return 0;
+        case VOCTRL_FULLSCREEN:
+            toggle_fullscreen(vo);
+            return 0;
         // TODO:
         case VOCTRL_UPDATE_SCREENINFO:
-        case VOCTRL_FULLSCREEN:
-            ;
+            break;
     }
     return VO_NOTIMPL;
 }
