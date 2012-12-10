@@ -150,7 +150,31 @@ const struct keymap_entry keys[] = {
     {SDLK_AUDIOPREV, KEY_PREV},
     {SDLK_AUDIOSTOP, KEY_STOP},
     {SDLK_AUDIOPLAY, KEY_PLAY},
-    {SDLK_AUDIOMUTE, KEY_MUTE}
+    {SDLK_AUDIOMUTE, KEY_MUTE},
+    {SDLK_F1, KEY_F+1},
+    {SDLK_F2, KEY_F+2},
+    {SDLK_F3, KEY_F+3},
+    {SDLK_F4, KEY_F+4},
+    {SDLK_F5, KEY_F+5},
+    {SDLK_F6, KEY_F+6},
+    {SDLK_F7, KEY_F+7},
+    {SDLK_F8, KEY_F+8},
+    {SDLK_F9, KEY_F+9},
+    {SDLK_F10, KEY_F+10},
+    {SDLK_F11, KEY_F+11},
+    {SDLK_F12, KEY_F+12},
+    {SDLK_F13, KEY_F+13},
+    {SDLK_F14, KEY_F+14},
+    {SDLK_F15, KEY_F+15},
+    {SDLK_F16, KEY_F+16},
+    {SDLK_F17, KEY_F+17},
+    {SDLK_F18, KEY_F+18},
+    {SDLK_F19, KEY_F+19},
+    {SDLK_F20, KEY_F+20},
+    {SDLK_F21, KEY_F+21},
+    {SDLK_F22, KEY_F+22},
+    {SDLK_F23, KEY_F+23},
+    {SDLK_F24, KEY_F+24}
 };
 
 static void resize(struct vo *vo)
