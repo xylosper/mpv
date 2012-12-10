@@ -53,6 +53,9 @@ struct priv {
     SDL_Texture *tex;
     mp_image_t texmpi;
     mp_image_t *ssmpi;
+    struct mp_rect src_rect;
+    struct mp_rect dst_rect;
+    struct mp_osd_res osd_res;
 };
 
 struct formatmap_entry {
@@ -101,6 +104,13 @@ const struct formatmap_entry formats[] = {
     {SDL_PIXELFORMAT_UYVY, IMGFMT_UYVY},
     {SDL_PIXELFORMAT_YVYU, IMGFMT_YVYU}
 };
+
+static void resize(struct vo *vo)
+{
+    struct priv *vc = vo->priv;
+    vo_get_src_dst_rects(vo, &vc->src_rect, &vc->dst_rect,
+            &vc->osd_res);
+}
 
 static int config(struct vo *vo, uint32_t width, uint32_t height,
         uint32_t d_width, uint32_t d_height, uint32_t flags,
