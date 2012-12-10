@@ -106,6 +106,53 @@ const struct formatmap_entry formats[] = {
     {SDL_PIXELFORMAT_YVYU, IMGFMT_YVYU}
 };
 
+struct keymap_entry {
+    SDL_Keycode sdl;
+    int mpv;
+};
+const struct keymap_entry keys[] = {
+    {SDLK_RETURN, KEY_ENTER},
+    {SDLK_ESCAPE, KEY_ESC},
+    {SDLK_BACKSPACE, KEY_BACKSPACE},
+    {SDLK_TAB, KEY_TAB},
+    {SDLK_PRINTSCREEN, KEY_PRINT},
+    {SDLK_PAUSE, KEY_PAUSE},
+    {SDLK_INSERT, KEY_INSERT},
+    {SDLK_HOME, KEY_HOME},
+    {SDLK_PAGEUP, KEY_PAGE_UP},
+    {SDLK_DELETE, KEY_DELETE},
+    {SDLK_END, KEY_END},
+    {SDLK_PAGEDOWN, KEY_PAGE_DOWN},
+    {SDLK_RIGHT, KEY_RIGHT},
+    {SDLK_LEFT, KEY_LEFT},
+    {SDLK_DOWN, KEY_DOWN},
+    {SDLK_UP, KEY_UP},
+    {SDLK_KP_ENTER, KEY_KPENTER},
+    {SDLK_KP_1, KEY_KP1},
+    {SDLK_KP_2, KEY_KP2},
+    {SDLK_KP_3, KEY_KP3},
+    {SDLK_KP_4, KEY_KP4},
+    {SDLK_KP_5, KEY_KP5},
+    {SDLK_KP_6, KEY_KP6},
+    {SDLK_KP_7, KEY_KP7},
+    {SDLK_KP_8, KEY_KP8},
+    {SDLK_KP_9, KEY_KP9},
+    {SDLK_KP_0, KEY_KP0},
+    {SDLK_KP_PERIOD, KEY_KPDEC},
+    {SDLK_POWER, KEY_POWER},
+    {SDLK_MENU, KEY_MENU},
+    {SDLK_STOP, KEY_STOP},
+    {SDLK_MUTE, KEY_MUTE},
+    {SDLK_VOLUMEUP, KEY_VOLUME_UP},
+    {SDLK_VOLUMEDOWN, KEY_VOLUME_DOWN},
+    {SDLK_KP_COMMA, KEY_KPDEC},
+    {SDLK_AUDIONEXT, KEY_NEXT},
+    {SDLK_AUDIOPREV, KEY_PREV},
+    {SDLK_AUDIOSTOP, KEY_STOP},
+    {SDLK_AUDIOPLAY, KEY_PLAY},
+    {SDLK_AUDIOMUTE, KEY_MUTE}
+};
+
 static void resize(struct vo *vo)
 {
     struct priv *vc = vo->priv;
@@ -194,20 +241,40 @@ static void check_events(struct vo *vo)
                         break;
                     case SDL_WINDOWEVENT_SIZE_CHANGED:
                         resize(vo);
+                        break;
                     case SDL_WINDOWEVENT_CLOSE:
                         mplayer_put_key(vo->key_fifo, KEY_CLOSE_WIN);
                         break;
                 }
                 break;
             case SDL_KEYDOWN:
+                {
+                    int keycode = 0;
+                    int i;
+                    if (ev.key.keysym.sym >= ' ' && ev.key.keysym.sym <= '~') {
+                        keycode = ev.key.keysym.sym;
+                    } else {
+                        for (i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i)
+                            if (keys[i].sdl == ev.key.keysym.sym) {
+                                keycode = keys[i].mpv;
+                                break;
+                            }
+                    }
+                    if (keycode)
+                        mplayer_put_key(vo->key_fifo, keycode);
+                }
                 break;
-            case SDL_KEYUP:
-                break;
-            case SDL_TEXTINPUT:
+            case SDL_MOUSEMOTION:
+                // TODO opts->cursor_autohide_delay
+                vo_mouse_movement(vo, ev.motion.x, ev.motion.y);
                 break;
             case SDL_MOUSEBUTTONDOWN:
+                // TODO opts->cursor_autohide_delay
+                mplayer_put_key(vo->key_fifo, (MOUSE_BTN0 + ev.button.button - 1) | MP_KEY_DOWN);
                 break;
             case SDL_MOUSEBUTTONUP:
+                // TODO opts->cursor_autohide_delay
+                mplayer_put_key(vo->key_fifo, (MOUSE_BTN0 + ev.button.button - 1));
                 break;
             case SDL_MOUSEWHEEL:
                 break;
