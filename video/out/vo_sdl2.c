@@ -146,7 +146,7 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
     return 0;
 }
 
-static void flip_page_timed(struct vo *vo, unsigned int pts_us, int duration)
+static void flip_page(struct vo *vo)
 {
     struct priv *vc = vo->priv;
     SDL_RenderPresent(vc->renderer);
@@ -307,6 +307,10 @@ static int control(struct vo *vo, uint32_t request, void *data)
         case VOCTRL_DRAW_IMAGE:
             draw_image(vo, (mp_image_t *)data, vo->next_pts);
             return 0;
+        // TODO:
+        case VOCTRL_UPDATE_SCREENINFO:
+        case VOCTRL_FULLSCREEN:
+            ;
     }
     return VO_NOTIMPL;
 }
@@ -325,5 +329,5 @@ const struct vo_driver video_out_sdl2 = {
     .uninit = uninit,
     .check_events = check_events,
     .draw_osd = draw_osd,
-    .flip_page_timed = flip_page_timed,
+    .flip_page = flip_page,
 };
