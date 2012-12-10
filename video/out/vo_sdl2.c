@@ -177,11 +177,22 @@ const struct keymap_entry keys[] = {
     {SDLK_F24, KEY_F+24}
 };
 
-static void resize(struct vo *vo)
+static void resize(struct vo *vo, int w, int h)
 {
     struct priv *vc = vo->priv;
+    vo->dwidth = w;
+    vo->dheight = h;
     vo_get_src_dst_rects(vo, &vc->src_rect, &vc->dst_rect,
             &vc->osd_res);
+}
+
+static void check_resize(struct vo *vo)
+{
+    struct priv *vc = vo->priv;
+    int w, h;
+    SDL_GetWindowSize(vc->window, &w, &h);
+    if (vo->dwidth != w || vo->dheight != h)
+        resize(vo, w, h);
 }
 
 static int config(struct vo *vo, uint32_t width, uint32_t height,
@@ -228,9 +239,13 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
 
     vc->ssmpi = alloc_mpi(width, height, format);
 
+    resize(vo, d_width, d_height);
+
     if (SDL_SetWindowFullscreen(vc->window, vo_fs))
         mp_msg(MSGT_VO, MSGL_ERR, "Cannot initialize fullscreen mode\n");
     SDL_ShowWindow(vc->window);
+
+    check_resize(vo);
 
     return 0;
 }
@@ -243,6 +258,7 @@ static void toggle_fullscreen(struct vo *vo)
         vo_fs = !vo_fs;
         mp_msg(MSGT_VO, MSGL_ERR, "Cannot toggle fullscreen mode\n");
     }
+    check_resize(vo);
 }
 
 static void flip_page(struct vo *vo)
@@ -264,7 +280,7 @@ static void check_events(struct vo *vo)
                             flip_page(vo);
                         break;
                     case SDL_WINDOWEVENT_SIZE_CHANGED:
-                        resize(vo);
+                        check_resize(vo);
                         break;
                     case SDL_WINDOWEVENT_CLOSE:
                         mplayer_put_key(vo->key_fifo, KEY_CLOSE_WIN);
@@ -411,12 +427,13 @@ static int query_format(struct vo *vo, uint32_t format)
 {
     struct priv *vc = vo->priv;
     int i, j;
+    int cap = VFCAP_CSP_SUPPORTED | VFCAP_FLIP | VFCAP_ACCEPT_STRIDE;
     mp_msg(MSGT_VO, MSGL_INFO, "Trying format: %08x\n", format);
     for (i = 0; i < vc->renderer_info.num_texture_formats; ++i)
         for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
             if (vc->renderer_info.texture_formats[i] == formats[j].sdl)
                 if (format == formats[j].mpv)
-                    return VFCAP_CSP_SUPPORTED;
+                    return cap;
     return 0;
 }
 
@@ -427,38 +444,53 @@ static void draw_image(struct vo *vo, mp_image_t *mpi, double pts)
     void *pixels;
     int pitch;
 
-    if (SDL_LockTexture(vc->tex, NULL, &pixels, &pitch)) {
-        mp_msg(MSGT_VO, MSGL_ERR, "Failed to lock texture\n");
-        return;
-    }
+    SDL_RenderClear(vc->renderer);
 
-    mp_image_t *texmpi = &vc->texmpi;
-    texmpi->planes[0] = pixels;
-    texmpi->stride[0] = pitch;
-    if (texmpi->num_planes == 3) {
-        if (texmpi->imgfmt == IMGFMT_YV12) {
-            texmpi->planes[2] =
-                ((Uint8 *) texmpi->planes[0] + texmpi->h * pitch);
-            texmpi->stride[2] = pitch / 2;
-            texmpi->planes[1] =
-                ((Uint8 *) texmpi->planes[2] + (texmpi->h * pitch) / 4);
-            texmpi->stride[1] = pitch / 2;
-        } else {
-            texmpi->planes[1] =
-                ((Uint8 *) texmpi->planes[0] + texmpi->h * pitch);
-            texmpi->stride[1] = pitch / 2;
-            texmpi->planes[2] =
-                ((Uint8 *) texmpi->planes[1] + (texmpi->h * pitch) / 4);
-            texmpi->stride[2] = pitch / 2;
+    if (mpi) {
+        if (SDL_LockTexture(vc->tex, NULL, &pixels, &pitch)) {
+            mp_msg(MSGT_VO, MSGL_ERR, "Failed to lock texture\n");
+            return;
         }
-    }
-    copy_mpi(texmpi, mpi);
 
-    SDL_UnlockTexture(vc->tex);
+        mp_image_t *texmpi = &vc->texmpi;
+        texmpi->planes[0] = pixels;
+        texmpi->stride[0] = pitch;
+        if (texmpi->num_planes == 3) {
+            if (texmpi->imgfmt == IMGFMT_YV12) {
+                texmpi->planes[2] =
+                    ((Uint8 *) texmpi->planes[0] + texmpi->h * pitch);
+                texmpi->stride[2] = pitch / 2;
+                texmpi->planes[1] =
+                    ((Uint8 *) texmpi->planes[2] + (texmpi->h * pitch) / 4);
+                texmpi->stride[1] = pitch / 2;
+            } else {
+                texmpi->planes[1] =
+                    ((Uint8 *) texmpi->planes[0] + texmpi->h * pitch);
+                texmpi->stride[1] = pitch / 2;
+                texmpi->planes[2] =
+                    ((Uint8 *) texmpi->planes[1] + (texmpi->h * pitch) / 4);
+                texmpi->stride[2] = pitch / 2;
+            }
+        }
+        copy_mpi(texmpi, mpi);
+
+        SDL_UnlockTexture(vc->tex);
+    }
+
+    SDL_Rect src, dst;
+    src.x = vc->src_rect.x0;
+    src.y = vc->src_rect.y0;
+    src.w = vc->src_rect.x1 - vc->src_rect.x0;
+    src.h = vc->src_rect.y1 - vc->src_rect.y0;
+    dst.x = vc->dst_rect.x0;
+    dst.y = vc->dst_rect.y0;
+    dst.w = vc->dst_rect.x1 - vc->dst_rect.x0;
+    dst.h = vc->dst_rect.y1 - vc->dst_rect.y0;
 
     // typically these two calls will run in parallel
-    SDL_RenderCopy(vc->renderer, vc->tex, NULL, NULL);
-    copy_mpi(vc->ssmpi, mpi);
+    SDL_RenderCopy(vc->renderer, vc->tex, &src, &dst);
+    if (mpi)
+        copy_mpi(vc->ssmpi, mpi);
 }
 
 static int control(struct vo *vo, uint32_t request, void *data)
@@ -472,14 +504,17 @@ static int control(struct vo *vo, uint32_t request, void *data)
             return 0;
         case VOCTRL_FULLSCREEN:
             toggle_fullscreen(vo);
-            return 0;
-        // TODO:
-        case VOCTRL_UPDATE_SCREENINFO:
-            break;
+            return 1;
         case VOCTRL_PAUSE:
             return vc->int_pause = 1;
         case VOCTRL_RESUME:
             return vc->int_pause = 0;
+        case VOCTRL_REDRAW_FRAME:
+            draw_image(vo, NULL, MP_NOPTS_VALUE);
+            return 1;
+        case VOCTRL_UPDATE_SCREENINFO:
+            // TODO
+            break;
     }
     return VO_NOTIMPL;
 }
