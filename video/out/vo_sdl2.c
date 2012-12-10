@@ -58,14 +58,41 @@ struct formatmap_entry {
     unsigned int mpv;
 };
 const struct formatmap_entry formats[] = {
+    {SDL_PIXELFORMAT_RGB24, IMGFMT_RGB24},
+    {SDL_PIXELFORMAT_BGR24, IMGFMT_BGR24},
+    {SDL_PIXELFORMAT_RGB24, IMGFMT_RGB24},
+    {SDL_PIXELFORMAT_BGR24, IMGFMT_BGR24},
+#if BYTE_ORDER == BIG_ENDIAN
     {SDL_PIXELFORMAT_RGB332, IMGFMT_RGB8},
     {SDL_PIXELFORMAT_RGB444, IMGFMT_RGB12},
     {SDL_PIXELFORMAT_RGB555, IMGFMT_RGB15},
     {SDL_PIXELFORMAT_BGR555, IMGFMT_BGR15},
     {SDL_PIXELFORMAT_RGB565, IMGFMT_RGB16},
     {SDL_PIXELFORMAT_BGR565, IMGFMT_BGR16},
-    {SDL_PIXELFORMAT_RGB24, IMGFMT_RGB24},
-    {SDL_PIXELFORMAT_BGR24, IMGFMT_BGR24},
+    {SDL_PIXELFORMAT_RGB888, IMGFMT_RGB24},
+    {SDL_PIXELFORMAT_BGR888, IMGFMT_BGR24},
+    {SDL_PIXELFORMAT_RGBX8888, IMGFMT_RGBA},
+    {SDL_PIXELFORMAT_BGRX8888, IMGFMT_BGRA},
+    {SDL_PIXELFORMAT_ARGB8888, IMGFMT_ARGB},
+    {SDL_PIXELFORMAT_RGBA8888, IMGFMT_RGBA},
+    {SDL_PIXELFORMAT_ABGR8888, IMGFMT_ABGR},
+    {SDL_PIXELFORMAT_BGRA8888, IMGFMT_BGRA},
+#else
+    {SDL_PIXELFORMAT_RGB332, IMGFMT_RGB8},
+    {SDL_PIXELFORMAT_RGB444, IMGFMT_BGR12},
+    {SDL_PIXELFORMAT_RGB555, IMGFMT_BGR15},
+    {SDL_PIXELFORMAT_BGR555, IMGFMT_RGB15},
+    {SDL_PIXELFORMAT_RGB565, IMGFMT_BGR16},
+    {SDL_PIXELFORMAT_BGR565, IMGFMT_RGB16},
+    {SDL_PIXELFORMAT_RGB888, IMGFMT_BGR24},
+    {SDL_PIXELFORMAT_BGR888, IMGFMT_RGB24},
+    {SDL_PIXELFORMAT_RGBX8888, IMGFMT_ABGR},
+    {SDL_PIXELFORMAT_BGRX8888, IMGFMT_ARGB},
+    {SDL_PIXELFORMAT_ARGB8888, IMGFMT_BGRA},
+    {SDL_PIXELFORMAT_RGBA8888, IMGFMT_ABGR},
+    {SDL_PIXELFORMAT_ABGR8888, IMGFMT_RGBA},
+    {SDL_PIXELFORMAT_BGRA8888, IMGFMT_ARGB},
+#endif
 //  {SDL_PIXELFORMAT_YV12, IMGFMT_YV12},
 //  {SDL_PIXELFORMAT_IYUV, IMGFMT_IYUV},
     {SDL_PIXELFORMAT_YUY2, IMGFMT_YUY2},
@@ -184,6 +211,17 @@ static int preinit(struct vo *vo, const char *arg)
         return 0;
     }
 
+    mp_msg(MSGT_VO, MSGL_INFO, "Picked renderer: %s\n", vc->renderer_info.name);
+    for (i = 0; i < vc->renderer_info.num_texture_formats; ++i) {
+        mp_msg(MSGT_VO, MSGL_INFO, "supports %s\n",
+                SDL_GetPixelFormatName(vc->renderer_info.texture_formats[i]));
+        int j;
+        for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
+            if (vc->renderer_info.texture_formats[i] == formats[j].sdl)
+                mp_msg(MSGT_VO, MSGL_INFO, "mpv calls this one %s\n",
+                        mp_imgfmt_to_name(formats[j].mpv));
+    }
+
     // global renderer state - why not set up right now
     SDL_SetRenderDrawBlendMode(vc->renderer, SDL_BLENDMODE_NONE);
 
@@ -197,13 +235,9 @@ static int query_format(struct vo *vo, uint32_t format)
     mp_msg(MSGT_VO, MSGL_INFO, "Trying format: %08x\n", format);
     for (i = 0; i < vc->renderer_info.num_texture_formats; ++i)
         for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
-            if (vc->renderer_info.texture_formats[i] == formats[j].sdl) {
-                if (format == formats[j].mpv) {
-                    mp_msg(MSGT_VO, MSGL_INFO, "Good format found for SDL2\n");
+            if (vc->renderer_info.texture_formats[i] == formats[j].sdl)
+                if (format == formats[j].mpv)
                     return VFCAP_CSP_SUPPORTED;
-                }
-            }
-    mp_msg(MSGT_VO, MSGL_INFO, "NOT SUPPORTED\n");
     return 0;
 }
 
