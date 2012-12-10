@@ -56,6 +56,7 @@ struct priv {
     struct mp_rect src_rect;
     struct mp_rect dst_rect;
     struct mp_osd_res osd_res;
+    int int_pause;
 };
 
 struct formatmap_entry {
@@ -181,6 +182,37 @@ static void flip_page(struct vo *vo)
 
 static void check_events(struct vo *vo)
 {
+    struct priv *vc = vo->priv;
+    SDL_Event ev;
+    while (SDL_PollEvent(&ev)) {
+        switch (ev.type) {
+            case SDL_WINDOWEVENT:
+                switch (ev.window.event) {
+                    case SDL_WINDOWEVENT_EXPOSED:
+                        if (vc->int_pause)
+                            flip_page(vo);
+                        break;
+                    case SDL_WINDOWEVENT_SIZE_CHANGED:
+                        resize(vo);
+                    case SDL_WINDOWEVENT_CLOSE:
+                        mplayer_put_key(vo->key_fifo, KEY_CLOSE_WIN);
+                        break;
+                }
+                break;
+            case SDL_KEYDOWN:
+                break;
+            case SDL_KEYUP:
+                break;
+            case SDL_TEXTINPUT:
+                break;
+            case SDL_MOUSEBUTTONDOWN:
+                break;
+            case SDL_MOUSEBUTTONUP:
+                break;
+            case SDL_MOUSEWHEEL:
+                break;
+        }
+    }
 }
 
 static void uninit(struct vo *vo)
@@ -328,6 +360,7 @@ static void draw_image(struct vo *vo, mp_image_t *mpi, double pts)
 
 static int control(struct vo *vo, uint32_t request, void *data)
 {
+    struct priv *vc = vo->priv;
     switch (request) {
         case VOCTRL_QUERY_FORMAT:
             return query_format(vo, *((uint32_t *)data));
@@ -340,6 +373,10 @@ static int control(struct vo *vo, uint32_t request, void *data)
         // TODO:
         case VOCTRL_UPDATE_SCREENINFO:
             break;
+        case VOCTRL_PAUSE:
+            return vc->int_pause = 1;
+        case VOCTRL_RESUME:
+            return vc->int_pause = 0;
     }
     return VO_NOTIMPL;
 }
