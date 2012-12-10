@@ -270,11 +270,13 @@ static void check_events(struct vo *vo)
                 break;
             case SDL_MOUSEBUTTONDOWN:
                 // TODO opts->cursor_autohide_delay
-                mplayer_put_key(vo->key_fifo, (MOUSE_BTN0 + ev.button.button - 1) | MP_KEY_DOWN);
+                mplayer_put_key(vo->key_fifo,
+                        (MOUSE_BTN0 + ev.button.button - 1) | MP_KEY_DOWN);
                 break;
             case SDL_MOUSEBUTTONUP:
                 // TODO opts->cursor_autohide_delay
-                mplayer_put_key(vo->key_fifo, (MOUSE_BTN0 + ev.button.button - 1));
+                mplayer_put_key(vo->key_fifo,
+                        (MOUSE_BTN0 + ev.button.button - 1));
                 break;
             case SDL_MOUSEWHEEL:
                 break;
@@ -350,7 +352,7 @@ static int preinit(struct vo *vo, const char *arg)
         return -1;
     }
 
-    if(SDL_GetRendererInfo(vc->renderer, &vc->renderer_info)) {
+    if (SDL_GetRendererInfo(vc->renderer, &vc->renderer_info)) {
         mp_msg(MSGT_VO, MSGL_ERR, "Could not get SDL2 renderer info\n");
         return 0;
     }
@@ -391,8 +393,8 @@ static void draw_image(struct vo *vo, mp_image_t *mpi, double pts)
 
     void *pixels;
     int pitch;
-    if (SDL_LockTexture(vc->tex, NULL, &pixels, &pitch))
-    {
+
+    if (SDL_LockTexture(vc->tex, NULL, &pixels, &pitch)) {
         mp_msg(MSGT_VO, MSGL_ERR, "Failed to lock texture\n");
         return;
     }
@@ -418,6 +420,7 @@ static void draw_image(struct vo *vo, mp_image_t *mpi, double pts)
         }
     }
     copy_mpi(texmpi, mpi);
+
     SDL_UnlockTexture(vc->tex);
 
     // typically these two calls will run in parallel
