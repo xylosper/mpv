@@ -563,6 +563,10 @@ static int preinit(struct vo *vo, const char *arg)
         return -1;
     }
 
+    SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, "1", SDL_HINT_DEFAULT);
+
+    // TODO options (render driver, etc.)
+
     vc->window = SDL_CreateWindow("MPV",
                                   SDL_WINDOWPOS_UNDEFINED,
                                   SDL_WINDOWPOS_UNDEFINED,
