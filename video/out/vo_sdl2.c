@@ -291,7 +291,7 @@ static void toggle_fullscreen(struct vo *vo)
         vo_fs = !vo_fs;
         mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_SetWindowFullscreen failed\n");
     }
-    check_resize(vo);
+    force_resize(vo);
 }
 
 static void flip_page(struct vo *vo)
