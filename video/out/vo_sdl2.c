@@ -75,6 +75,11 @@ struct priv {
         int render_count;
         struct bitmap_packer *packer;
     } osd_surfaces[MAX_OSD_PARTS];
+
+    // options
+    const char *opt_driver;
+    bool opt_shaders;
+    int opt_scale;
 };
 
 struct formatmap_entry {
@@ -372,7 +377,6 @@ static void uninit(struct vo *vo)
     free_mp_image(vc->ssmpi);
     SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_TIMER);
     talloc_free(vc);
-    vo->priv = NULL;
 }
 
 static struct bitmap_packer *make_packer(struct vo *vo)
@@ -533,11 +537,16 @@ static void draw_osd(struct vo *vo, struct osd_state *osd)
     osd_draw(osd, vc->osd_res, osd->vo_pts, 0, formats, draw_osd_cb, vo);
 }
 
-static bool MP_SDL_IsGoodRenderer(int n)
+static bool MP_SDL_IsGoodRenderer(int n, const char *driver_name_wanted)
 {
     SDL_RendererInfo ri;
     if (SDL_GetRenderDriverInfo(n, &ri))
         return false;
+
+    if (driver_name_wanted && driver_name_wanted[0])
+        if (strcmp(driver_name_wanted, ri.name))
+            return false;
+
     int i, j;
     for (i = 0; i < ri.num_texture_formats; ++i)
         for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
@@ -548,9 +557,7 @@ static bool MP_SDL_IsGoodRenderer(int n)
 
 static int preinit(struct vo *vo, const char *arg)
 {
-    struct priv *vc;
-    vo->priv = talloc_zero(vo, struct priv);
-    vc = vo->priv;
+    struct priv *vc = vo->priv;
 
     int i, j;
 
@@ -563,9 +570,38 @@ static int preinit(struct vo *vo, const char *arg)
         return -1;
     }
 
-    SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, "1", SDL_HINT_DEFAULT);
+    // predefine SDL defaults (SDL env vars shall override)
+    SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, "1",
+            SDL_HINT_DEFAULT);
 
-    // TODO options (render driver, etc.)
+    // predefine MPV options (SDL env vars shall be overridden)
+    if (vc->opt_driver && *vc->opt_driver)
+        SDL_SetHintWithPriority(SDL_HINT_RENDER_DRIVER, vc->opt_driver,
+                SDL_HINT_OVERRIDE);
+
+    if (vc->opt_shaders)
+        SDL_SetHintWithPriority(SDL_HINT_RENDER_OPENGL_SHADERS, "1",
+                SDL_HINT_OVERRIDE);
+    else
+        SDL_SetHintWithPriority(SDL_HINT_RENDER_OPENGL_SHADERS, "0",
+                SDL_HINT_OVERRIDE);
+
+    if (vc->opt_scale == 0)
+        SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, "0",
+                SDL_HINT_OVERRIDE);
+    else if (vc->opt_scale == 1)
+        SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, "1",
+                SDL_HINT_OVERRIDE);
+    else if (vc->opt_scale == 2)
+        SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, "2",
+                SDL_HINT_OVERRIDE);
+
+    if (vo_vsync)
+        SDL_SetHintWithPriority(SDL_HINT_RENDER_VSYNC, "1",
+                SDL_HINT_OVERRIDE);
+    else
+        SDL_SetHintWithPriority(SDL_HINT_RENDER_VSYNC, "0",
+                SDL_HINT_OVERRIDE);
 
     vc->window = SDL_CreateWindow("MPV",
                                   SDL_WINDOWPOS_UNDEFINED,
@@ -577,11 +613,15 @@ static int preinit(struct vo *vo, const char *arg)
         return -1;
     }
 
-    for (i = 0; i < SDL_GetNumRenderDrivers(); ++i)
-        if (MP_SDL_IsGoodRenderer(i))
+    int n = SDL_GetNumRenderDrivers();
+    for (i = 0; i < n; ++i)
+        if (MP_SDL_IsGoodRenderer(i, SDL_GetHint(SDL_HINT_RENDER_DRIVER)))
             break;
-
-    if (i >= SDL_GetNumRenderDrivers()) {
+    if (i >= n)
+        for (i = 0; i < n; ++i)
+            if (MP_SDL_IsGoodRenderer(i, NULL))
+                break;
+    if (i >= n) {
         mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] No supported renderer\n");
         return -1;
     }
@@ -729,6 +769,9 @@ static int control(struct vo *vo, uint32_t request, void *data)
     return VO_NOTIMPL;
 }
 
+#undef OPT_BASE_STRUCT
+#define OPT_BASE_STRUCT struct priv
+
 const struct vo_driver video_out_sdl2 = {
     .is_new = true,
     .info = &(const vo_info_t) {
@@ -736,6 +779,18 @@ const struct vo_driver video_out_sdl2 = {
         "sdl2",
         "Rudolf Polzer <divVerent@xonotic.org>",
         ""
+    },
+    .priv_size = sizeof(struct priv),
+    .priv_defaults = &(const struct priv) {
+        .opt_driver = "",
+        .opt_shaders = true,
+        .opt_scale = 1,
+    },
+    .options = (const struct m_option[]) {
+        OPT_STRING("driver", opt_driver, 0),
+        OPT_MAKE_FLAGS("shaders", opt_shaders, 0),
+        OPT_INTRANGE("scale", opt_scale, 0, -1, 2),
+        {0},
     },
     .preinit = preinit,
     .config = config,
