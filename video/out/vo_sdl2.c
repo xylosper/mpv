@@ -561,7 +561,8 @@ static int preinit(struct vo *vo, const char *arg)
     vc->window = SDL_CreateWindow("MPV",
                                   SDL_WINDOWPOS_UNDEFINED,
                                   SDL_WINDOWPOS_UNDEFINED,
-                                  640, 480, SDL_WINDOW_RESIZABLE);
+                                  640, 480,
+                                  SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN);
     if (!vc->window) {
         mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_CreateWindow failedd\n");
         return -1;
