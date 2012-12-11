@@ -324,19 +324,39 @@ static void check_events(struct vo *vo)
                 break;
             }
             break;
+        case SDL_TEXTINPUT:
+            {
+                int sdl_mod = SDL_GetModState();
+                int mpv_mod = 0;
+                // we ignore KMOD_LSHIFT, KMOD_RSHIFT and KMOD_RALT because
+                // these are already factored into ev.text.text
+                if (sdl_mod & (KMOD_LCTRL | KMOD_RCTRL))
+                    mpv_mod |= KEY_MODIFIER_CTRL;
+                if (sdl_mod & KMOD_LALT)
+                    mpv_mod |= KEY_MODIFIER_ALT;
+                if (sdl_mod & (KMOD_LGUI | KMOD_RGUI))
+                    mpv_mod |= KEY_MODIFIER_META;
+                struct bstr t = { ev.text.text, strlen(ev.text.text) };
+                mplayer_put_key_utf8(vo->key_fifo, mpv_mod, t);
+            }
+            break;
         case SDL_KEYDOWN:
         {
+            // Issue: we don't know in advance whether this keydown event
+            // will ALSO cause a SDL_TEXTINPUT event
+            // So we're conservative, and only map non printable keycodes
+            // (e.g. function keys, arrow keys, etc.)
+            // However, this does lose some keypresses at least on X11
+            // (e.g. Ctrl-A generates SDL_KEYDOWN only, but the key is
+            // 'a'... and 'a' is normally also handled by SDL_TEXTINPUT).
+            // The default config does not use Ctrl, so this is fine...
             int keycode = 0;
             int i;
-            if (ev.key.keysym.sym >= ' ' && ev.key.keysym.sym <= '~')
-                keycode = ev.key.keysym.sym;
-            else {
-                for (i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i)
-                    if (keys[i].sdl == ev.key.keysym.sym) {
-                        keycode = keys[i].mpv;
-                        break;
-                    }
-            }
+            for (i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i)
+                if (keys[i].sdl == ev.key.keysym.sym) {
+                    keycode = keys[i].mpv;
+                    break;
+                }
             if (keycode) {
                 if (ev.key.keysym.mod & (KMOD_LSHIFT | KMOD_RSHIFT))
                     keycode |= KEY_MODIFIER_SHIFT;
