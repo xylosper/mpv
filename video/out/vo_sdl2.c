@@ -269,8 +269,13 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
 
     resize(vo, d_width, d_height);
 
-    if (SDL_SetWindowFullscreen(vc->window, vo_fs))
-        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_SetWindowFullscreen failed\n");
+    if (flags & VOFLAG_FULLSCREEN) {
+        if (SDL_SetWindowFullscreen(vc->window, 1))
+            mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_SetWindowFullscreen failed\n");
+        else
+            vo_fs = 1;
+    }
+
     SDL_ShowWindow(vc->window);
 
     check_resize(vo);
