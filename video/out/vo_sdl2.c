@@ -170,30 +170,30 @@ const struct keymap_entry keys[] = {
     {SDLK_AUDIOSTOP, KEY_STOP},
     {SDLK_AUDIOPLAY, KEY_PLAY},
     {SDLK_AUDIOMUTE, KEY_MUTE},
-    {SDLK_F1, KEY_F+1},
-    {SDLK_F2, KEY_F+2},
-    {SDLK_F3, KEY_F+3},
-    {SDLK_F4, KEY_F+4},
-    {SDLK_F5, KEY_F+5},
-    {SDLK_F6, KEY_F+6},
-    {SDLK_F7, KEY_F+7},
-    {SDLK_F8, KEY_F+8},
-    {SDLK_F9, KEY_F+9},
-    {SDLK_F10, KEY_F+10},
-    {SDLK_F11, KEY_F+11},
-    {SDLK_F12, KEY_F+12},
-    {SDLK_F13, KEY_F+13},
-    {SDLK_F14, KEY_F+14},
-    {SDLK_F15, KEY_F+15},
-    {SDLK_F16, KEY_F+16},
-    {SDLK_F17, KEY_F+17},
-    {SDLK_F18, KEY_F+18},
-    {SDLK_F19, KEY_F+19},
-    {SDLK_F20, KEY_F+20},
-    {SDLK_F21, KEY_F+21},
-    {SDLK_F22, KEY_F+22},
-    {SDLK_F23, KEY_F+23},
-    {SDLK_F24, KEY_F+24}
+    {SDLK_F1, KEY_F + 1},
+    {SDLK_F2, KEY_F + 2},
+    {SDLK_F3, KEY_F + 3},
+    {SDLK_F4, KEY_F + 4},
+    {SDLK_F5, KEY_F + 5},
+    {SDLK_F6, KEY_F + 6},
+    {SDLK_F7, KEY_F + 7},
+    {SDLK_F8, KEY_F + 8},
+    {SDLK_F9, KEY_F + 9},
+    {SDLK_F10, KEY_F + 10},
+    {SDLK_F11, KEY_F + 11},
+    {SDLK_F12, KEY_F + 12},
+    {SDLK_F13, KEY_F + 13},
+    {SDLK_F14, KEY_F + 14},
+    {SDLK_F15, KEY_F + 15},
+    {SDLK_F16, KEY_F + 16},
+    {SDLK_F17, KEY_F + 17},
+    {SDLK_F18, KEY_F + 18},
+    {SDLK_F19, KEY_F + 19},
+    {SDLK_F20, KEY_F + 20},
+    {SDLK_F21, KEY_F + 21},
+    {SDLK_F22, KEY_F + 22},
+    {SDLK_F23, KEY_F + 23},
+    {SDLK_F24, KEY_F + 24}
 };
 
 static void resize(struct vo *vo, int w, int h)
@@ -202,7 +202,7 @@ static void resize(struct vo *vo, int w, int h)
     vo->dwidth = w;
     vo->dheight = h;
     vo_get_src_dst_rects(vo, &vc->src_rect, &vc->dst_rect,
-            &vc->osd_res);
+                         &vc->osd_res);
     SDL_RenderSetLogicalSize(vc->renderer, w, h);
 }
 
@@ -224,8 +224,8 @@ static void check_resize(struct vo *vo)
 }
 
 static int config(struct vo *vo, uint32_t width, uint32_t height,
-        uint32_t d_width, uint32_t d_height, uint32_t flags,
-        uint32_t format)
+                  uint32_t d_width, uint32_t d_height, uint32_t flags,
+                  uint32_t format)
 {
     struct priv *vc = vo->priv;
     SDL_SetWindowSize(vc->window, d_width, d_height);
@@ -244,7 +244,7 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
     }
 
     vc->tex = SDL_CreateTexture(vc->renderer, texfmt,
-            SDL_TEXTUREACCESS_STREAMING, width, height);
+                                SDL_TEXTUREACCESS_STREAMING, width, height);
     if (!vc->tex) {
         mp_msg(MSGT_VO, MSGL_ERR, "Could not create a SDL2 texture\n");
         return -1;
@@ -255,14 +255,14 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
     texmpi->height = texmpi->h = height;
     mp_image_setfmt(texmpi, format);
     switch (texmpi->num_planes) {
-        case 1:
-        case 3:
-            break;
-        default:
-            mp_msg(MSGT_VO, MSGL_ERR, "Invalid plane count in pixel format\n");
-            SDL_DestroyTexture(vc->tex);
-            vc->tex = NULL;
-            return -1;
+    case 1:
+    case 3:
+        break;
+    default:
+        mp_msg(MSGT_VO, MSGL_ERR, "Invalid plane count in pixel format\n");
+        SDL_DestroyTexture(vc->tex);
+        vc->tex = NULL;
+        return -1;
     }
 
     vc->ssmpi = alloc_mpi(width, height, format);
@@ -301,62 +301,62 @@ static void check_events(struct vo *vo)
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
         switch (ev.type) {
-            case SDL_WINDOWEVENT:
-                switch (ev.window.event) {
-                    case SDL_WINDOWEVENT_EXPOSED:
-                        if (vc->int_pause)
-                            flip_page(vo);
-                        break;
-                    case SDL_WINDOWEVENT_SIZE_CHANGED:
-                        check_resize(vo);
-                        break;
-                    case SDL_WINDOWEVENT_CLOSE:
-                        mplayer_put_key(vo->key_fifo, KEY_CLOSE_WIN);
-                        break;
-                }
+        case SDL_WINDOWEVENT:
+            switch (ev.window.event) {
+            case SDL_WINDOWEVENT_EXPOSED:
+                if (vc->int_pause)
+                    flip_page(vo);
                 break;
-            case SDL_KEYDOWN:
-                {
-                    int keycode = 0;
-                    int i;
-                    if (ev.key.keysym.sym >= ' ' && ev.key.keysym.sym <= '~') {
-                        keycode = ev.key.keysym.sym;
-                    } else {
-                        for (i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i)
-                            if (keys[i].sdl == ev.key.keysym.sym) {
-                                keycode = keys[i].mpv;
-                                break;
-                            }
+            case SDL_WINDOWEVENT_SIZE_CHANGED:
+                check_resize(vo);
+                break;
+            case SDL_WINDOWEVENT_CLOSE:
+                mplayer_put_key(vo->key_fifo, KEY_CLOSE_WIN);
+                break;
+            }
+            break;
+        case SDL_KEYDOWN:
+        {
+            int keycode = 0;
+            int i;
+            if (ev.key.keysym.sym >= ' ' && ev.key.keysym.sym <= '~')
+                keycode = ev.key.keysym.sym;
+            else {
+                for (i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i)
+                    if (keys[i].sdl == ev.key.keysym.sym) {
+                        keycode = keys[i].mpv;
+                        break;
                     }
-                    if (keycode) {
-                        if (ev.key.keysym.mod & (KMOD_LSHIFT | KMOD_RSHIFT))
-                            keycode |= KEY_MODIFIER_SHIFT;
-                        if (ev.key.keysym.mod & (KMOD_LCTRL | KMOD_RCTRL))
-                            keycode |= KEY_MODIFIER_CTRL;
-                        if (ev.key.keysym.mod & (KMOD_LALT | KMOD_RALT))
-                            keycode |= KEY_MODIFIER_ALT;
-                        if (ev.key.keysym.mod & (KMOD_LGUI | KMOD_RGUI))
-                            keycode |= KEY_MODIFIER_META;
-                        mplayer_put_key(vo->key_fifo, keycode);
-                    }
-                }
-                break;
-            case SDL_MOUSEMOTION:
-                // TODO opts->cursor_autohide_delay
-                vo_mouse_movement(vo, ev.motion.x, ev.motion.y);
-                break;
-            case SDL_MOUSEBUTTONDOWN:
-                // TODO opts->cursor_autohide_delay
-                mplayer_put_key(vo->key_fifo,
-                        (MOUSE_BTN0 + ev.button.button - 1) | MP_KEY_DOWN);
-                break;
-            case SDL_MOUSEBUTTONUP:
-                // TODO opts->cursor_autohide_delay
-                mplayer_put_key(vo->key_fifo,
-                        (MOUSE_BTN0 + ev.button.button - 1));
-                break;
-            case SDL_MOUSEWHEEL:
-                break;
+            }
+            if (keycode) {
+                if (ev.key.keysym.mod & (KMOD_LSHIFT | KMOD_RSHIFT))
+                    keycode |= KEY_MODIFIER_SHIFT;
+                if (ev.key.keysym.mod & (KMOD_LCTRL | KMOD_RCTRL))
+                    keycode |= KEY_MODIFIER_CTRL;
+                if (ev.key.keysym.mod & (KMOD_LALT | KMOD_RALT))
+                    keycode |= KEY_MODIFIER_ALT;
+                if (ev.key.keysym.mod & (KMOD_LGUI | KMOD_RGUI))
+                    keycode |= KEY_MODIFIER_META;
+                mplayer_put_key(vo->key_fifo, keycode);
+            }
+        }
+        break;
+        case SDL_MOUSEMOTION:
+            // TODO opts->cursor_autohide_delay
+            vo_mouse_movement(vo, ev.motion.x, ev.motion.y);
+            break;
+        case SDL_MOUSEBUTTONDOWN:
+            // TODO opts->cursor_autohide_delay
+            mplayer_put_key(vo->key_fifo,
+                            (MOUSE_BTN0 + ev.button.button - 1) | MP_KEY_DOWN);
+            break;
+        case SDL_MOUSEBUTTONUP:
+            // TODO opts->cursor_autohide_delay
+            mplayer_put_key(vo->key_fifo,
+                            (MOUSE_BTN0 + ev.button.button - 1));
+            break;
+        case SDL_MOUSEWHEEL:
+            break;
         }
     }
 }
@@ -384,7 +384,7 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
     struct osd_bitmap_surface *sfc = &vc->osd_surfaces[imgs->render_index];
 
     if (imgs->bitmap_pos_id == sfc->bitmap_pos_id)
-        return; // Nothing changed and we still have the old data
+        return;  // Nothing changed and we still have the old data
 
     sfc->render_count = 0;
 
@@ -405,11 +405,11 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
         int r = packer_pack_from_subbitmaps(sfc->packer, imgs);
         if (r < 0) {
             mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] OSD bitmaps do not fit on "
-                    "a surface with the maximum supported size\n");
+                   "a surface with the maximum supported size\n");
             return;
         } else {
             mp_msg(MSGT_VO, MSGL_V, "[sdl2] Allocating a %dx%d surface for "
-                    "OSD bitmaps.\n", sfc->packer->w, sfc->packer->h);
+                   "OSD bitmaps.\n", sfc->packer->w, sfc->packer->h);
             surfpixels = talloc_size(vc, sfc->packer->w * sfc->packer->h * 4);
             surfpitch = sfc->packer->w * 4;
             if (!surfpixels) {
@@ -422,59 +422,64 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
             talloc_free(sfc->targets);
             sfc->targets_size = sfc->packer->count;
             sfc->targets = talloc_size(vc, sfc->targets_size *
-                    sizeof(*sfc->targets));
+                                       sizeof(*sfc->targets));
         }
     }
 
-    for (int i = 0 ;i < sfc->packer->count; i++) {
+    for (int i = 0; i < sfc->packer->count; i++) {
         struct sub_bitmap *b = &imgs->parts[i];
         struct osd_target *target = sfc->targets + sfc->render_count;
         int x = sfc->packer->result[i].x;
         int y = sfc->packer->result[i].y;
-        target->source = (SDL_Rect){x, y, b->w, b->h};
-        target->dest = (SDL_Rect){b->x, b->y, b->dw, b->dh};
+        target->source = (SDL_Rect){
+            x, y, b->w, b->h
+        };
+        target->dest = (SDL_Rect){
+            b->x, b->y, b->dw, b->dh
+        };
         switch (imgs->format) {
-            case SUBBITMAP_LIBASS:
-                target->alpha = 255 - ((b->libass.color >> 0) & 0xff);
-                target->color[0] = ((b->libass.color >>  8) & 0xff);
-                target->color[1] = ((b->libass.color >> 16) & 0xff);
-                target->color[2] = ((b->libass.color >> 24) & 0xff);
-                if (surfpixels) {
-                    // damn SDL has no support for 8bit gray...
-                    // idea: could instead hand craft a SDL_Surface with palette
-                    size_t n = b->h * b->stride, i;
-                    uint32_t *bmp = talloc_size(vc, n * 4);
-                    for (i = 0; i < n; ++i)
-                        bmp[i] = 0x00FFFFFF |
-                            ((((uint8_t *) b->bitmap)[i]) << 24);
-                    SDL_ConvertPixels(
-                            b->w, b->h, SDL_PIXELFORMAT_ARGB8888,
-                                bmp, b->stride * 4,
-                            vc->osd_sdl_format,
-                                surfpixels + x * 4 + y * surfpitch, surfpitch);
-                    talloc_free(bmp);
-                }
-                break;
-            case SUBBITMAP_RGBA:
-                target->alpha = 255;
-                target->color[0] = 255;
-                target->color[1] = 255;
-                target->color[2] = 255;
-                if (surfpixels) {
-                    SDL_ConvertPixels(
-                            b->w, b->h, SDL_PIXELFORMAT_ARGB8888,
-                                b->bitmap, b->stride,
-                            vc->osd_sdl_format,
-                                surfpixels + x * 4 + y * surfpitch, surfpitch);
-                }
-                break;
+        case SUBBITMAP_LIBASS:
+            target->alpha = 255 - ((b->libass.color >> 0) & 0xff);
+            target->color[0] = ((b->libass.color >>  8) & 0xff);
+            target->color[1] = ((b->libass.color >> 16) & 0xff);
+            target->color[2] = ((b->libass.color >> 24) & 0xff);
+            if (surfpixels) {
+                // damn SDL has no support for 8bit gray...
+                // idea: could instead hand craft a SDL_Surface with palette
+                size_t n = b->h * b->stride, i;
+                uint32_t *bmp = talloc_size(vc, n * 4);
+                for (i = 0; i < n; ++i)
+                    bmp[i] = 0x00FFFFFF |
+                             ((((uint8_t *) b->bitmap)[i]) << 24);
+                SDL_ConvertPixels(
+                    b->w, b->h, SDL_PIXELFORMAT_ARGB8888,
+                        bmp, b->stride * 4,
+                    vc->osd_sdl_format,
+                        surfpixels + x * 4 + y * surfpitch, surfpitch);
+                talloc_free(bmp);
+            }
+            break;
+        case SUBBITMAP_RGBA:
+            target->alpha = 255;
+            target->color[0] = 255;
+            target->color[1] = 255;
+            target->color[2] = 255;
+            if (surfpixels) {
+                SDL_ConvertPixels(
+                    b->w, b->h, SDL_PIXELFORMAT_ARGB8888,
+                        b->bitmap, b->stride,
+                    vc->osd_sdl_format,
+                        surfpixels + x * 4 + y * surfpitch, surfpitch);
+            }
+            break;
         }
         sfc->render_count++;
     }
 
     if (surfpixels) {
         sfc->tex = SDL_CreateTexture(vc->renderer, vc->osd_sdl_format,
-            SDL_TEXTUREACCESS_STATIC, sfc->packer->w, sfc->packer->h);
+                                     SDL_TEXTUREACCESS_STATIC, sfc->packer->w,
+                                     sfc->packer->h);
         if (!surfpixels) {
             mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] Could not create texture\n");
             return;
@@ -498,7 +503,8 @@ static void draw_osd_part(struct vo *vo, int index)
         struct osd_target *target = sfc->targets + i;
         SDL_SetTextureAlphaMod(sfc->tex, sfc->targets[i].alpha);
         SDL_SetTextureColorMod(sfc->tex, sfc->targets[i].color[0],
-                sfc->targets[i].color[1], sfc->targets[i].color[2]);
+                sfc->targets[i].color[1],
+                sfc->targets[i].color[2]);
         SDL_RenderCopy(vc->renderer, sfc->tex, &target->source, &target->dest);
     }
 }
@@ -551,8 +557,9 @@ static int preinit(struct vo *vo, const char *arg)
     }
 
     vc->window = SDL_CreateWindow("MPV",
-            SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 480,
-            SDL_WINDOW_RESIZABLE);
+                                  SDL_WINDOWPOS_UNDEFINED,
+                                  SDL_WINDOWPOS_UNDEFINED,
+                                  640, 480, SDL_WINDOW_RESIZABLE);
     if (!vc->window) {
         mp_msg(MSGT_VO, MSGL_ERR, "Could not get a SDL2 window\n");
         return -1;
@@ -585,12 +592,12 @@ static int preinit(struct vo *vo, const char *arg)
     mp_msg(MSGT_VO, MSGL_INFO, "Picked renderer: %s\n", vc->renderer_info.name);
     for (i = 0; i < vc->renderer_info.num_texture_formats; ++i) {
         mp_msg(MSGT_VO, MSGL_INFO, "supports %s\n",
-                SDL_GetPixelFormatName(vc->renderer_info.texture_formats[i]));
+               SDL_GetPixelFormatName(vc->renderer_info.texture_formats[i]));
         int j;
         for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
             if (vc->renderer_info.texture_formats[i] == formats[j].sdl) {
                 mp_msg(MSGT_VO, MSGL_INFO, "mpv calls this one %s\n",
-                        mp_imgfmt_to_name(formats[j].mpv));
+                       mp_imgfmt_to_name(formats[j].mpv));
                 if (formats[j].is_rgba)
                     vc->osd_sdl_format = formats[j].sdl;
             }
@@ -603,7 +610,8 @@ static int query_format(struct vo *vo, uint32_t format)
 {
     struct priv *vc = vo->priv;
     int i, j;
-    int cap = VFCAP_CSP_SUPPORTED | VFCAP_FLIP | VFCAP_ACCEPT_STRIDE | VFCAP_OSD;
+    int cap = VFCAP_CSP_SUPPORTED | VFCAP_FLIP | VFCAP_ACCEPT_STRIDE |
+              VFCAP_OSD;
     mp_msg(MSGT_VO, MSGL_INFO, "Trying format: %08x\n", format);
     for (i = 0; i < vc->renderer_info.num_texture_formats; ++i)
         for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
@@ -687,29 +695,29 @@ static int control(struct vo *vo, uint32_t request, void *data)
 {
     struct priv *vc = vo->priv;
     switch (request) {
-        case VOCTRL_QUERY_FORMAT:
-            return query_format(vo, *((uint32_t *)data));
-        case VOCTRL_DRAW_IMAGE:
-            draw_image(vo, (mp_image_t *)data, vo->next_pts);
-            return 0;
-        case VOCTRL_FULLSCREEN:
-            toggle_fullscreen(vo);
-            return 1;
-        case VOCTRL_PAUSE:
-            return vc->int_pause = 1;
-        case VOCTRL_RESUME:
-            return vc->int_pause = 0;
-        case VOCTRL_REDRAW_FRAME:
-            draw_image(vo, NULL, MP_NOPTS_VALUE);
-            return 1;
-        case VOCTRL_UPDATE_SCREENINFO:
-            update_screeninfo(vo);
-            return 1;
-        case VOCTRL_GET_PANSCAN:
-            return VO_TRUE;
-        case VOCTRL_SET_PANSCAN:
-            force_resize(vo);
-            return VO_TRUE;
+    case VOCTRL_QUERY_FORMAT:
+        return query_format(vo, *((uint32_t *)data));
+    case VOCTRL_DRAW_IMAGE:
+        draw_image(vo, (mp_image_t *)data, vo->next_pts);
+        return 0;
+    case VOCTRL_FULLSCREEN:
+        toggle_fullscreen(vo);
+        return 1;
+    case VOCTRL_PAUSE:
+        return vc->int_pause = 1;
+    case VOCTRL_RESUME:
+        return vc->int_pause = 0;
+    case VOCTRL_REDRAW_FRAME:
+        draw_image(vo, NULL, MP_NOPTS_VALUE);
+        return 1;
+    case VOCTRL_UPDATE_SCREENINFO:
+        update_screeninfo(vo);
+        return 1;
+    case VOCTRL_GET_PANSCAN:
+        return VO_TRUE;
+    case VOCTRL_SET_PANSCAN:
+        force_resize(vo);
+        return VO_TRUE;
     }
     return VO_NOTIMPL;
 }
