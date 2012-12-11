@@ -596,9 +596,6 @@ static int preinit(struct vo *vo, const char *arg)
             }
     }
 
-    // global renderer state - why not set up right now
-    SDL_SetRenderDrawBlendMode(vc->renderer, SDL_BLENDMODE_NONE);
-
     return 0;
 }
 
