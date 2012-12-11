@@ -41,6 +41,7 @@
 #include "video/mp_image.h"
 #include "video/vfcap.h"
 #include "aspect.h"
+#include "bitmap_packer.h"
 
 #include "core/input/keycodes.h"
 #include "core/input/input.h"
@@ -59,53 +60,69 @@ struct priv {
     struct mp_rect dst_rect;
     struct mp_osd_res osd_res;
     int int_pause;
+    Uint32 osd_sdl_format;
+    struct osd_bitmap_surface {
+        int bitmap_id;
+        int bitmap_pos_id;
+        SDL_Texture *tex;
+        struct osd_target {
+            SDL_Rect source;
+            SDL_Rect dest;
+            Uint8 color[3];
+            Uint8 alpha;
+        } *targets;
+        int targets_size;
+        int render_count;
+        struct bitmap_packer *packer;
+    } osd_surfaces[MAX_OSD_PARTS];
 };
 
 struct formatmap_entry {
     Uint32 sdl;
     unsigned int mpv;
+    bool is_rgba;
 };
 const struct formatmap_entry formats[] = {
-    {SDL_PIXELFORMAT_RGB24, IMGFMT_RGB24},
-    {SDL_PIXELFORMAT_BGR24, IMGFMT_BGR24},
-    {SDL_PIXELFORMAT_RGB24, IMGFMT_RGB24},
-    {SDL_PIXELFORMAT_BGR24, IMGFMT_BGR24},
+    {SDL_PIXELFORMAT_YV12, IMGFMT_YV12, 0},
+    {SDL_PIXELFORMAT_IYUV, IMGFMT_IYUV, 0},
+    {SDL_PIXELFORMAT_YUY2, IMGFMT_YUY2, 0},
+    {SDL_PIXELFORMAT_UYVY, IMGFMT_UYVY, 0},
+    {SDL_PIXELFORMAT_YVYU, IMGFMT_YVYU, 0},
 #if BYTE_ORDER == BIG_ENDIAN
-    {SDL_PIXELFORMAT_RGB332, IMGFMT_RGB8},
-    {SDL_PIXELFORMAT_RGB444, IMGFMT_RGB12},
-    {SDL_PIXELFORMAT_RGB555, IMGFMT_RGB15},
-    {SDL_PIXELFORMAT_BGR555, IMGFMT_BGR15},
-    {SDL_PIXELFORMAT_RGB565, IMGFMT_RGB16},
-    {SDL_PIXELFORMAT_BGR565, IMGFMT_BGR16},
-    {SDL_PIXELFORMAT_RGB888, IMGFMT_RGB24},
-    {SDL_PIXELFORMAT_BGR888, IMGFMT_BGR24},
-    {SDL_PIXELFORMAT_RGBX8888, IMGFMT_RGBA},
-    {SDL_PIXELFORMAT_BGRX8888, IMGFMT_BGRA},
-    {SDL_PIXELFORMAT_ARGB8888, IMGFMT_ARGB},
-    {SDL_PIXELFORMAT_RGBA8888, IMGFMT_RGBA},
-    {SDL_PIXELFORMAT_ABGR8888, IMGFMT_ABGR},
-    {SDL_PIXELFORMAT_BGRA8888, IMGFMT_BGRA},
+    {SDL_PIXELFORMAT_RGBX8888, IMGFMT_RGBA, 1},
+    {SDL_PIXELFORMAT_BGRX8888, IMGFMT_BGRA, 1},
+    {SDL_PIXELFORMAT_ARGB8888, IMGFMT_ARGB, 1},
+    {SDL_PIXELFORMAT_RGBA8888, IMGFMT_RGBA, 1},
+    {SDL_PIXELFORMAT_ABGR8888, IMGFMT_ABGR, 1},
+    {SDL_PIXELFORMAT_BGRA8888, IMGFMT_BGRA, 1},
+    {SDL_PIXELFORMAT_RGB24, IMGFMT_RGB24, 0},
+    {SDL_PIXELFORMAT_BGR24, IMGFMT_BGR24, 0},
+    {SDL_PIXELFORMAT_RGB888, IMGFMT_RGB24, 0},
+    {SDL_PIXELFORMAT_BGR888, IMGFMT_BGR24, 0},
+    {SDL_PIXELFORMAT_RGB565, IMGFMT_RGB16, 0},
+    {SDL_PIXELFORMAT_BGR565, IMGFMT_BGR16, 0},
+    {SDL_PIXELFORMAT_RGB555, IMGFMT_RGB15, 0},
+    {SDL_PIXELFORMAT_BGR555, IMGFMT_BGR15, 0},
+    {SDL_PIXELFORMAT_RGB444, IMGFMT_RGB12, 0},
+    {SDL_PIXELFORMAT_RGB332, IMGFMT_RGB8, 0}
 #else
-    {SDL_PIXELFORMAT_RGB332, IMGFMT_RGB8},
-    {SDL_PIXELFORMAT_RGB444, IMGFMT_BGR12},
-    {SDL_PIXELFORMAT_RGB555, IMGFMT_BGR15},
-    {SDL_PIXELFORMAT_BGR555, IMGFMT_RGB15},
-    {SDL_PIXELFORMAT_RGB565, IMGFMT_BGR16},
-    {SDL_PIXELFORMAT_BGR565, IMGFMT_RGB16},
-    {SDL_PIXELFORMAT_RGB888, IMGFMT_BGR24},
-    {SDL_PIXELFORMAT_BGR888, IMGFMT_RGB24},
-    {SDL_PIXELFORMAT_RGBX8888, IMGFMT_ABGR},
-    {SDL_PIXELFORMAT_BGRX8888, IMGFMT_ARGB},
-    {SDL_PIXELFORMAT_ARGB8888, IMGFMT_BGRA},
-    {SDL_PIXELFORMAT_RGBA8888, IMGFMT_ABGR},
-    {SDL_PIXELFORMAT_ABGR8888, IMGFMT_RGBA},
-    {SDL_PIXELFORMAT_BGRA8888, IMGFMT_ARGB},
+    {SDL_PIXELFORMAT_RGBX8888, IMGFMT_ABGR, 1},
+    {SDL_PIXELFORMAT_BGRX8888, IMGFMT_ARGB, 1},
+    {SDL_PIXELFORMAT_ARGB8888, IMGFMT_BGRA, 1},
+    {SDL_PIXELFORMAT_RGBA8888, IMGFMT_ABGR, 1},
+    {SDL_PIXELFORMAT_ABGR8888, IMGFMT_RGBA, 1},
+    {SDL_PIXELFORMAT_BGRA8888, IMGFMT_ARGB, 1},
+    {SDL_PIXELFORMAT_RGB24, IMGFMT_RGB24, 0},
+    {SDL_PIXELFORMAT_BGR24, IMGFMT_BGR24, 0},
+    {SDL_PIXELFORMAT_RGB888, IMGFMT_BGR24, 0},
+    {SDL_PIXELFORMAT_BGR888, IMGFMT_RGB24, 0},
+    {SDL_PIXELFORMAT_RGB565, IMGFMT_BGR16, 0},
+    {SDL_PIXELFORMAT_BGR565, IMGFMT_RGB16, 0},
+    {SDL_PIXELFORMAT_RGB555, IMGFMT_BGR15, 0},
+    {SDL_PIXELFORMAT_BGR555, IMGFMT_RGB15, 0},
+    {SDL_PIXELFORMAT_RGB444, IMGFMT_BGR12, 0},
+    {SDL_PIXELFORMAT_RGB332, IMGFMT_RGB8, 0}
 #endif
-    {SDL_PIXELFORMAT_YV12, IMGFMT_YV12},
-    {SDL_PIXELFORMAT_IYUV, IMGFMT_IYUV},
-    {SDL_PIXELFORMAT_YUY2, IMGFMT_YUY2},
-    {SDL_PIXELFORMAT_UYVY, IMGFMT_UYVY},
-    {SDL_PIXELFORMAT_YVYU, IMGFMT_YVYU}
 };
 
 struct keymap_entry {
@@ -353,8 +370,156 @@ static void uninit(struct vo *vo)
     vo->priv = NULL;
 }
 
+static struct bitmap_packer *make_packer(struct vo *vo)
+{
+    struct bitmap_packer *packer = talloc_zero(vo, struct bitmap_packer);
+    packer->w_max = 4096; // FIXME is there a maximum size?
+    packer->h_max = 4096; // FIXME is there a maximum size?
+    return packer;
+}
+
+static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
+{
+    struct priv *vc = vo->priv;
+    struct osd_bitmap_surface *sfc = &vc->osd_surfaces[imgs->render_index];
+
+    if (imgs->bitmap_pos_id == sfc->bitmap_pos_id)
+        return; // Nothing changed and we still have the old data
+
+    sfc->render_count = 0;
+
+    if (imgs->format == SUBBITMAP_EMPTY || imgs->num_parts == 0)
+        return;
+
+    unsigned char *surfpixels = NULL;
+    int surfpitch = 0;
+
+    if (imgs->bitmap_id != sfc->bitmap_id) {
+        if (sfc->tex)
+            SDL_DestroyTexture(sfc->tex);
+        sfc->tex = NULL;
+
+        if (!sfc->packer)
+            sfc->packer = make_packer(vo);
+        sfc->packer->padding = 0;
+        int r = packer_pack_from_subbitmaps(sfc->packer, imgs);
+        if (r < 0) {
+            mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] OSD bitmaps do not fit on "
+                    "a surface with the maximum supported size\n");
+            return;
+        } else {
+            mp_msg(MSGT_VO, MSGL_V, "[sdl2] Allocating a %dx%d surface for "
+                    "OSD bitmaps.\n", sfc->packer->w, sfc->packer->h);
+            surfpixels = talloc_size(vc, sfc->packer->w * sfc->packer->h * 4);
+            surfpitch = sfc->packer->w * 4;
+            if (!surfpixels) {
+                mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] Could not create surface\n");
+                return;
+            }
+        }
+
+        if (sfc->packer->count > sfc->targets_size) {
+            talloc_free(sfc->targets);
+            sfc->targets_size = sfc->packer->count;
+            sfc->targets = talloc_size(vc, sfc->targets_size *
+                    sizeof(*sfc->targets));
+        }
+    }
+
+    for (int i = 0 ;i < sfc->packer->count; i++) {
+        struct sub_bitmap *b = &imgs->parts[i];
+        struct osd_target *target = sfc->targets + sfc->render_count;
+        int x = sfc->packer->result[i].x;
+        int y = sfc->packer->result[i].y;
+        target->source = (SDL_Rect){x, y, b->w, b->h};
+        target->dest = (SDL_Rect){b->x, b->y, b->dw, b->dh};
+        switch (imgs->format) {
+            case SUBBITMAP_LIBASS:
+                target->alpha = 255 - ((b->libass.color >> 0) & 0xff);
+                target->color[0] = ((b->libass.color >>  8) & 0xff);
+                target->color[1] = ((b->libass.color >> 16) & 0xff);
+                target->color[2] = ((b->libass.color >> 24) & 0xff);
+                if (surfpixels) {
+                    // damn SDL has no support for 8bit gray...
+                    // idea: could instead hand craft a SDL_Surface with palette
+                    size_t n = b->h * b->stride, i;
+                    uint32_t *bmp = talloc_size(vc, n * 4);
+                    for (i = 0; i < n; ++i)
+                        bmp[i] = 0x00FFFFFF |
+                            ((((uint8_t *) b->bitmap)[i]) << 24);
+                    SDL_ConvertPixels(
+                            b->w, b->h, SDL_PIXELFORMAT_ARGB8888,
+                                bmp, b->stride * 4,
+                            vc->osd_sdl_format,
+                                surfpixels + x * 4 + y * surfpitch, surfpitch);
+                    talloc_free(bmp);
+                }
+                break;
+            case SUBBITMAP_RGBA:
+                target->alpha = 255;
+                target->color[0] = 255;
+                target->color[1] = 255;
+                target->color[2] = 255;
+                if (surfpixels) {
+                    SDL_ConvertPixels(
+                            b->w, b->h, SDL_PIXELFORMAT_BGRA8888,
+                                b->bitmap, b->stride,
+                            vc->osd_sdl_format,
+                                surfpixels + x * 4 + y * surfpitch, surfpitch);
+                }
+                break;
+        }
+        sfc->render_count++;
+    }
+
+    if (surfpixels) {
+        sfc->tex = SDL_CreateTexture(vc->renderer, vc->osd_sdl_format,
+            SDL_TEXTUREACCESS_STATIC, sfc->packer->w, sfc->packer->h);
+        if (!surfpixels) {
+            mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] Could not create texture\n");
+            return;
+        }
+        SDL_UpdateTexture(sfc->tex, NULL, surfpixels, surfpitch);
+        talloc_free(surfpixels);
+        SDL_SetTextureBlendMode(sfc->tex, SDL_BLENDMODE_BLEND);
+    }
+
+    sfc->bitmap_id = imgs->bitmap_id;
+    sfc->bitmap_pos_id = imgs->bitmap_pos_id;
+}
+
+static void draw_osd_part(struct vo *vo, int index)
+{
+    struct priv *vc = vo->priv;
+    struct osd_bitmap_surface *sfc = &vc->osd_surfaces[index];
+    int i;
+
+    for (i = 0; i < sfc->render_count; i++) {
+        struct osd_target *target = sfc->targets + i;
+        SDL_SetTextureAlphaMod(sfc->tex, sfc->targets[i].alpha);
+        SDL_SetTextureColorMod(sfc->tex, sfc->targets[i].color[0],
+                sfc->targets[i].color[1], sfc->targets[i].color[2]);
+        SDL_RenderCopy(vc->renderer, sfc->tex, &target->source, &target->dest);
+    }
+}
+
+static void draw_osd_cb(void *ctx, struct sub_bitmaps *imgs)
+{
+    struct vo *vo = ctx;
+    generate_osd_part(vo, imgs);
+    draw_osd_part(vo, imgs->render_index);
+}
+
 static void draw_osd(struct vo *vo, struct osd_state *osd)
 {
+    struct priv *vc = vo->priv;
+
+    static const bool formats[SUBBITMAP_COUNT] = {
+        [SUBBITMAP_LIBASS] = true,
+        [SUBBITMAP_RGBA] = true,
+    };
+
+    osd_draw(osd, vc->osd_res, osd->vo_pts, 0, formats, draw_osd_cb, vo);
 }
 
 static bool MP_SDL_IsGoodRenderer(int n)
@@ -365,7 +530,7 @@ static bool MP_SDL_IsGoodRenderer(int n)
     int i, j;
     for (i = 0; i < ri.num_texture_formats; ++i)
         for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
-            if (ri.texture_formats[i] == formats[j].sdl)
+            if (ri.texture_formats[i] == formats[j].sdl && formats[j].is_rgba)
                 return true;
     return false;
 }
@@ -380,7 +545,7 @@ static int preinit(struct vo *vo, const char *arg)
         mp_msg(MSGT_VO, MSGL_ERR, "SDL2 already initialized\n");
         return -1;
     }
-    if (SDL_VideoInit(NULL)) {
+    if (SDL_Init(SDL_INIT_VIDEO)) {
         mp_msg(MSGT_VO, MSGL_ERR, "SDL_Init failed\n");
         return -1;
     }
@@ -423,9 +588,12 @@ static int preinit(struct vo *vo, const char *arg)
                 SDL_GetPixelFormatName(vc->renderer_info.texture_formats[i]));
         int j;
         for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
-            if (vc->renderer_info.texture_formats[i] == formats[j].sdl)
+            if (vc->renderer_info.texture_formats[i] == formats[j].sdl) {
                 mp_msg(MSGT_VO, MSGL_INFO, "mpv calls this one %s\n",
                         mp_imgfmt_to_name(formats[j].mpv));
+                if (formats[j].is_rgba)
+                    vc->osd_sdl_format = formats[j].sdl;
+            }
     }
 
     // global renderer state - why not set up right now
@@ -438,7 +606,7 @@ static int query_format(struct vo *vo, uint32_t format)
 {
     struct priv *vc = vo->priv;
     int i, j;
-    int cap = VFCAP_CSP_SUPPORTED | VFCAP_FLIP | VFCAP_ACCEPT_STRIDE;
+    int cap = VFCAP_CSP_SUPPORTED | VFCAP_FLIP | VFCAP_ACCEPT_STRIDE | VFCAP_OSD;
     mp_msg(MSGT_VO, MSGL_INFO, "Trying format: %08x\n", format);
     for (i = 0; i < vc->renderer_info.num_texture_formats; ++i)
         for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
