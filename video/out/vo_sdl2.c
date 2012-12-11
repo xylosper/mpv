@@ -49,39 +49,6 @@
 #include "core/mp_fifo.h"
 #include "core/options.h"
 
-struct priv {
-    SDL_Window *window;
-    SDL_Renderer *renderer;
-    SDL_RendererInfo renderer_info;
-    SDL_Texture *tex;
-    mp_image_t texmpi;
-    mp_image_t *ssmpi;
-    struct mp_rect src_rect;
-    struct mp_rect dst_rect;
-    struct mp_osd_res osd_res;
-    int int_pause;
-    Uint32 osd_sdl_format;
-    struct osd_bitmap_surface {
-        int bitmap_id;
-        int bitmap_pos_id;
-        SDL_Texture *tex;
-        struct osd_target {
-            SDL_Rect source;
-            SDL_Rect dest;
-            Uint8 color[3];
-            Uint8 alpha;
-        } *targets;
-        int targets_size;
-        int render_count;
-        struct bitmap_packer *packer;
-    } osd_surfaces[MAX_OSD_PARTS];
-
-    // options
-    const char *opt_driver;
-    bool opt_shaders;
-    int opt_scale;
-};
-
 struct formatmap_entry {
     Uint32 sdl;
     unsigned int mpv;
@@ -201,6 +168,39 @@ const struct keymap_entry keys[] = {
     {SDLK_F24, KEY_F + 24}
 };
 
+struct priv {
+    SDL_Window *window;
+    SDL_Renderer *renderer;
+    SDL_RendererInfo renderer_info;
+    SDL_Texture *tex;
+    mp_image_t texmpi;
+    mp_image_t *ssmpi;
+    struct mp_rect src_rect;
+    struct mp_rect dst_rect;
+    struct mp_osd_res osd_res;
+    int int_pause;
+    struct formatmap_entry osd_format;
+    struct osd_bitmap_surface {
+        int bitmap_id;
+        int bitmap_pos_id;
+        SDL_Texture *tex;
+        struct osd_target {
+            SDL_Rect source;
+            SDL_Rect dest;
+            Uint8 color[3];
+            Uint8 alpha;
+        } *targets;
+        int targets_size;
+        int render_count;
+        struct bitmap_packer *packer;
+    } osd_surfaces[MAX_OSD_PARTS];
+
+    // options
+    const char *opt_driver;
+    bool opt_shaders;
+    int opt_scale;
+};
+
 static void resize(struct vo *vo, int w, int h)
 {
     struct priv *vc = vo->priv;
@@ -308,7 +308,6 @@ static void flip_page(struct vo *vo)
 
 static void check_events(struct vo *vo)
 {
-    struct priv *vc = vo->priv;
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
         switch (ev.type) {
@@ -463,7 +462,7 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
                 SDL_ConvertPixels(
                     b->w, b->h, SDL_PIXELFORMAT_ARGB8888,
                         bmp, b->stride * 4,
-                    vc->osd_sdl_format,
+                    vc->osd_format.sdl,
                         surfpixels + x * 4 + y * surfpitch, surfpitch);
                 talloc_free(bmp);
             }
@@ -477,7 +476,7 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
                 SDL_ConvertPixels(
                     b->w, b->h, SDL_PIXELFORMAT_ARGB8888,
                         b->bitmap, b->stride,
-                    vc->osd_sdl_format,
+                    vc->osd_format.sdl,
                         surfpixels + x * 4 + y * surfpitch, surfpitch);
             }
             break;
@@ -486,7 +485,7 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
     }
 
     if (surfpixels) {
-        sfc->tex = SDL_CreateTexture(vc->renderer, vc->osd_sdl_format,
+        sfc->tex = SDL_CreateTexture(vc->renderer, vc->osd_format.sdl,
                                      SDL_TEXTUREACCESS_STATIC, sfc->packer->w,
                                      sfc->packer->h);
         if (!surfpixels) {
@@ -645,7 +644,7 @@ static int preinit(struct vo *vo, const char *arg)
         for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
             if (vc->renderer_info.texture_formats[i] == formats[j].sdl)
                 if (formats[j].is_rgba)
-                    vc->osd_sdl_format = formats[j].sdl;
+                    vc->osd_format = formats[j];
 
     // we don't have proper event handling
     vo->wakeup_period = 0.02;
@@ -738,6 +737,28 @@ static void update_screeninfo(struct vo *vo)
     aspect_save_screenres(vo, opts->vo_screenwidth, opts->vo_screenheight);
 }
 
+static struct mp_image *get_screenshot(struct vo *vo)
+{
+    struct priv *vc = vo->priv;
+    mp_image_t *image = alloc_mpi(vc->ssmpi->width, vc->ssmpi->height,
+            vc->ssmpi->imgfmt);
+    copy_mpi(image, vc->ssmpi);
+    return image;
+}
+
+static struct mp_image *get_window_screenshot(struct vo *vo)
+{
+    struct priv *vc = vo->priv;
+    mp_image_t *image = alloc_mpi(vo->dwidth, vo->dheight, vc->osd_format.mpv);
+    if (SDL_RenderReadPixels(vc->renderer, NULL, vc->osd_format.sdl,
+                image->planes[0], image->stride[0])) {
+        free_mp_image(image);
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_RenderReadPixels failed\n");
+        return NULL;
+    }
+    return image;
+}
+
 static int control(struct vo *vo, uint32_t request, void *data)
 {
     struct priv *vc = vo->priv;
@@ -765,6 +786,14 @@ static int control(struct vo *vo, uint32_t request, void *data)
     case VOCTRL_SET_PANSCAN:
         force_resize(vo);
         return VO_TRUE;
+    case VOCTRL_SCREENSHOT: {
+            struct voctrl_screenshot_args *args = data;
+            if (args->full_window)
+                args->out_image = get_window_screenshot(vo);
+            else
+                args->out_image = get_screenshot(vo);
+            return true;
+        }
     }
     return VO_NOTIMPL;
 }
