@@ -603,6 +603,9 @@ static int preinit(struct vo *vo, const char *arg)
                 if (formats[j].is_rgba)
                     vc->osd_sdl_format = formats[j].sdl;
 
+    // we don't have proper event handling
+    vo->wakeup_period = 0.02;
+
     return 0;
 }
 
