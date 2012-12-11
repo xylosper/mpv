@@ -178,10 +178,14 @@ static void draw_ass_rgba(unsigned char *src, int src_w, int src_h,
     for (int y = 0; y < src_h; y++, dst += dst_stride, src += src_stride) {
         for (int x = 0; x < src_w; x++) {
             const unsigned int v = src[x];
-            dst[4*x + 0] = (b * v + dst[4*x + 0] * (0xff - v)) / 255;
-            dst[4*x + 1] = (g * v + dst[4*x + 1] * (0xff - v)) / 255;
-            dst[4*x + 2] = (r * v + dst[4*x + 2] * (0xff - v)) / 255;
-            dst[4*x + 3] = (a * v + dst[4*x + 3] * (0xff - v)) / 255;
+            int rr = (r * a * v);
+            int gg = (g * a * v);
+            int bb = (b * a * v);
+            int aa =      a * v;
+            dst[4*x + 0] = (bb + dst[4*x + 0] * (255 * 255 - aa)) / (255 * 255);
+            dst[4*x + 1] = (gg + dst[4*x + 1] * (255 * 255 - aa)) / (255 * 255);
+            dst[4*x + 2] = (rr + dst[4*x + 2] * (255 * 255 - aa)) / (255 * 255);
+            dst[4*x + 3] = (aa * 255 + dst[4*x + 3] * (255 * 255 - aa)) / (255 * 255);
         }
     }
 }
@@ -224,9 +228,6 @@ bool osd_conv_ass_to_rgba(struct osd_conv_cache *c, struct sub_bitmaps *imgs)
                       s->x - bb.x0, s->y - bb.y0,
                       s->libass.color);
     }
-
-    // Maybe all blending could be done in premultiplied in draw_ass_rgba()?
-    rgba_to_premultiplied_rgba(bmp->bitmap, (bmp->stride * bmp->h) / 4);
 
     imgs->num_parts = 1;
     return true;
