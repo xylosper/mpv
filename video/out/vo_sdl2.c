@@ -406,6 +406,35 @@ static struct bitmap_packer *make_packer(struct vo *vo)
     return packer;
 }
 
+static void unpremultiply_BGR32(unsigned char *out, int ostride,
+        const unsigned char *in, int istride, int w, int h)
+{
+    for (int y = 0; y < h; ++y) {
+        uint32_t *irow = (uint32_t *) &in[istride * y];
+        uint32_t *orow = (uint32_t *) &out[ostride * y];
+        for (int x = 0; x < w; ++x) {
+            uint32_t pval = irow[x];
+            uint8_t aval = (pval >> 24);
+            uint8_t rval = (pval >> 16) & 0xFF;
+            uint8_t gval = (pval >> 8) & 0xFF;
+            uint8_t bval = pval & 0xFF;
+            // multiplied = separate * alpha / 255
+            // separate = rint(multiplied * 255 / alpha)
+            //          = floor(multiplied * 255 / alpha + 0.5)
+            //          = floor((multiplied * 255 + 0.5 * alpha) / alpha)
+            //          = floor((multiplied * 255 + floor(0.5 * alpha)) / alpha)
+            int div = (int) aval;
+            int add = div / 2;
+            if (aval) {
+                rval = FFMIN(255, (rval * 255 + add) / div);
+                gval = FFMIN(255, (gval * 255 + add) / div);
+                bval = FFMIN(255, (bval * 255 + add) / div);
+                orow[x] = bval + (gval << 8) + (rval << 16) + (aval << 24);
+            }
+        }
+    }
+}
+
 static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
 {
     struct priv *vc = vo->priv;
@@ -474,7 +503,7 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
             if (surfpixels) {
                 // damn SDL has no support for 8bit gray...
                 // idea: could instead hand craft a SDL_Surface with palette
-                size_t n = b->h * b->stride, i;
+                size_t n = (b->h - 1) * b->stride + b->w, i;
                 uint32_t *bmp = talloc_size(vc, n * 4);
                 for (i = 0; i < n; ++i)
                     bmp[i] = 0x00FFFFFF |
@@ -493,11 +522,17 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
             target->color[1] = 255;
             target->color[2] = 255;
             if (surfpixels) {
+                // need to un-premultiply alpha (I know this will scale wrong,
+                // but we really can't afford calling libswscale here)
+                uint8_t *bmp = talloc_size(vc, b->w * b->h * 4);
+                unpremultiply_BGR32(bmp, b->w * 4,
+                    b->bitmap, b->stride, b->w, b->h);
                 SDL_ConvertPixels(
                     b->w, b->h, SDL_PIXELFORMAT_ARGB8888,
-                        b->bitmap, b->stride,
+                        bmp, b->w * 4,
                     vc->osd_format.sdl,
                         surfpixels + x * 4 + y * surfpitch, surfpitch);
+                talloc_free(bmp);
             }
             break;
         }
