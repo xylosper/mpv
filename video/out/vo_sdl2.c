@@ -209,6 +209,7 @@ static void resize(struct vo *vo, int w, int h)
     vo_get_src_dst_rects(vo, &vc->src_rect, &vc->dst_rect,
                          &vc->osd_res);
     SDL_RenderSetLogicalSize(vc->renderer, w, h);
+    vo->want_redraw = true;
 }
 
 static void force_resize(struct vo *vo)
@@ -314,8 +315,7 @@ static void check_events(struct vo *vo)
         case SDL_WINDOWEVENT:
             switch (ev.window.event) {
             case SDL_WINDOWEVENT_EXPOSED:
-                if (vc->int_pause)
-                    flip_page(vo);
+                vo->want_redraw = true;
                 break;
             case SDL_WINDOWEVENT_SIZE_CHANGED:
                 check_resize(vo);
