@@ -462,7 +462,7 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
                 target->color[2] = 255;
                 if (surfpixels) {
                     SDL_ConvertPixels(
-                            b->w, b->h, SDL_PIXELFORMAT_BGRA8888,
+                            b->w, b->h, SDL_PIXELFORMAT_ARGB8888,
                                 b->bitmap, b->stride,
                             vc->osd_sdl_format,
                                 surfpixels + x * 4 + y * surfpitch, surfpitch);
