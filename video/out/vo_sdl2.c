@@ -622,6 +622,8 @@ static int preinit(struct vo *vo, const char *arg)
                 break;
     if (i >= n) {
         mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] No supported renderer\n");
+        SDL_DestroyWindow(vc->window);
+        vc->window = NULL;
         return -1;
     }
 
@@ -635,6 +637,8 @@ static int preinit(struct vo *vo, const char *arg)
 
     if (SDL_GetRendererInfo(vc->renderer, &vc->renderer_info)) {
         mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_GetRendererInfo failed\n");
+        SDL_DestroyWindow(vc->window);
+        vc->window = NULL;
         return 0;
     }
 
@@ -752,8 +756,8 @@ static struct mp_image *get_window_screenshot(struct vo *vo)
     mp_image_t *image = alloc_mpi(vo->dwidth, vo->dheight, vc->osd_format.mpv);
     if (SDL_RenderReadPixels(vc->renderer, NULL, vc->osd_format.sdl,
                 image->planes[0], image->stride[0])) {
-        free_mp_image(image);
         mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_RenderReadPixels failed\n");
+        free_mp_image(image);
         return NULL;
     }
     return image;
