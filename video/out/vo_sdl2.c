@@ -239,14 +239,14 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
                 if (format == formats[j].mpv)
                     texfmt = formats[j].sdl;
     if (texfmt == SDL_PIXELFORMAT_UNKNOWN) {
-        mp_msg(MSGT_VO, MSGL_ERR, "Invalid pixel format\n");
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] Invalid pixel format\n");
         return -1;
     }
 
     vc->tex = SDL_CreateTexture(vc->renderer, texfmt,
                                 SDL_TEXTUREACCESS_STREAMING, width, height);
     if (!vc->tex) {
-        mp_msg(MSGT_VO, MSGL_ERR, "Could not create a SDL2 texture\n");
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] Could not create a texture\n");
         return -1;
     }
 
@@ -259,7 +259,7 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
     case 3:
         break;
     default:
-        mp_msg(MSGT_VO, MSGL_ERR, "Invalid plane count in pixel format\n");
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] Invalid plane count\n");
         SDL_DestroyTexture(vc->tex);
         vc->tex = NULL;
         return -1;
@@ -270,7 +270,7 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
     resize(vo, d_width, d_height);
 
     if (SDL_SetWindowFullscreen(vc->window, vo_fs))
-        mp_msg(MSGT_VO, MSGL_ERR, "Cannot initialize fullscreen mode\n");
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_SetWindowFullscreen failed\n");
     SDL_ShowWindow(vc->window);
 
     check_resize(vo);
@@ -284,7 +284,7 @@ static void toggle_fullscreen(struct vo *vo)
     vo_fs = !vo_fs;
     if (SDL_SetWindowFullscreen(vc->window, vo_fs)) {
         vo_fs = !vo_fs;
-        mp_msg(MSGT_VO, MSGL_ERR, "Cannot toggle fullscreen mode\n");
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_SetWindowFullscreen failed\n");
     }
     check_resize(vo);
 }
@@ -547,12 +547,14 @@ static int preinit(struct vo *vo, const char *arg)
     vo->priv = talloc_zero(vo, struct priv);
     vc = vo->priv;
 
+    int i, j;
+
     if (SDL_WasInit(SDL_INIT_VIDEO)) {
-        mp_msg(MSGT_VO, MSGL_ERR, "SDL2 already initialized\n");
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] already initialized\n");
         return -1;
     }
     if (SDL_Init(SDL_INIT_VIDEO)) {
-        mp_msg(MSGT_VO, MSGL_ERR, "SDL_Init failed\n");
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_Init failed\n");
         return -1;
     }
 
@@ -561,47 +563,39 @@ static int preinit(struct vo *vo, const char *arg)
                                   SDL_WINDOWPOS_UNDEFINED,
                                   640, 480, SDL_WINDOW_RESIZABLE);
     if (!vc->window) {
-        mp_msg(MSGT_VO, MSGL_ERR, "Could not get a SDL2 window\n");
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_CreateWindow failedd\n");
         return -1;
     }
 
-    int i;
-    for (i = 0; i < SDL_GetNumRenderDrivers(); ++i) {
+    for (i = 0; i < SDL_GetNumRenderDrivers(); ++i)
         if (MP_SDL_IsGoodRenderer(i))
             break;
-    }
 
     if (i >= SDL_GetNumRenderDrivers()) {
-        mp_msg(MSGT_VO, MSGL_ERR, "No suitable SDL2 renderer\n");
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] No supported renderer\n");
         return -1;
     }
 
     vc->renderer = SDL_CreateRenderer(vc->window, i, 0);
     if (!vc->renderer) {
-        mp_msg(MSGT_VO, MSGL_ERR, "Could not get a SDL2 renderer\n");
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_CreateRenderer failed\n");
         SDL_DestroyWindow(vc->window);
         vc->window = NULL;
         return -1;
     }
 
     if (SDL_GetRendererInfo(vc->renderer, &vc->renderer_info)) {
-        mp_msg(MSGT_VO, MSGL_ERR, "Could not get SDL2 renderer info\n");
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_GetRendererInfo failed\n");
         return 0;
     }
 
-    mp_msg(MSGT_VO, MSGL_INFO, "Picked renderer: %s\n", vc->renderer_info.name);
-    for (i = 0; i < vc->renderer_info.num_texture_formats; ++i) {
-        mp_msg(MSGT_VO, MSGL_INFO, "supports %s\n",
-               SDL_GetPixelFormatName(vc->renderer_info.texture_formats[i]));
-        int j;
+    mp_msg(MSGT_VO, MSGL_INFO, "[sdl2] Using %s\n", vc->renderer_info.name);
+
+    for (i = 0; i < vc->renderer_info.num_texture_formats; ++i)
         for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
-            if (vc->renderer_info.texture_formats[i] == formats[j].sdl) {
-                mp_msg(MSGT_VO, MSGL_INFO, "mpv calls this one %s\n",
-                       mp_imgfmt_to_name(formats[j].mpv));
+            if (vc->renderer_info.texture_formats[i] == formats[j].sdl)
                 if (formats[j].is_rgba)
                     vc->osd_sdl_format = formats[j].sdl;
-            }
-    }
 
     return 0;
 }
@@ -612,7 +606,6 @@ static int query_format(struct vo *vo, uint32_t format)
     int i, j;
     int cap = VFCAP_CSP_SUPPORTED | VFCAP_FLIP | VFCAP_ACCEPT_STRIDE |
               VFCAP_OSD;
-    mp_msg(MSGT_VO, MSGL_INFO, "Trying format: %08x\n", format);
     for (i = 0; i < vc->renderer_info.num_texture_formats; ++i)
         for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
             if (vc->renderer_info.texture_formats[i] == formats[j].sdl)
@@ -628,11 +621,12 @@ static void draw_image(struct vo *vo, mp_image_t *mpi, double pts)
     void *pixels;
     int pitch;
 
+    // typically this runs in parallel with the following copy_mpi call
     SDL_RenderClear(vc->renderer);
 
     if (mpi) {
         if (SDL_LockTexture(vc->tex, NULL, &pixels, &pitch)) {
-            mp_msg(MSGT_VO, MSGL_ERR, "Failed to lock texture\n");
+            mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_LockTexture failed\n");
             return;
         }
 
@@ -671,7 +665,7 @@ static void draw_image(struct vo *vo, mp_image_t *mpi, double pts)
     dst.w = vc->dst_rect.x1 - vc->dst_rect.x0;
     dst.h = vc->dst_rect.y1 - vc->dst_rect.y0;
 
-    // typically these two calls will run in parallel
+    // typically this runs in parallel with the following copy_mpi call
     SDL_RenderCopy(vc->renderer, vc->tex, &src, &dst);
     if (mpi)
         copy_mpi(vc->ssmpi, mpi);
@@ -682,7 +676,7 @@ static void update_screeninfo(struct vo *vo)
     struct priv *vc = vo->priv;
     SDL_DisplayMode mode;
     if (SDL_GetCurrentDisplayMode(SDL_GetWindowDisplay(vc->window), &mode)) {
-        mp_msg(MSGT_VO, MSGL_ERR, "Failed to get display mode\n");
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_GetCurrentDisplayMode failed\n");
         return;
     }
     struct MPOpts *opts = vo->opts;
