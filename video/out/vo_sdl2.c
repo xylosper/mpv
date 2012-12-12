@@ -199,6 +199,7 @@ struct priv {
     const char *opt_driver;
     bool opt_shaders;
     int opt_scale;
+    bool opt_fixtrans;
 };
 
 static void resize(struct vo *vo, int w, int h)
@@ -406,26 +407,64 @@ static struct bitmap_packer *make_packer(struct vo *vo)
     return packer;
 }
 
-static void unpremultiply_BGR32(unsigned char *out, int ostride,
+static void unpremultiply_BGR32(struct vo *vo, unsigned char *out, int ostride,
         const unsigned char *in, int istride, int w, int h)
 {
+    struct priv *vc = vo->priv;
+
     for (int y = 0; y < h; ++y) {
         uint32_t *irow = (uint32_t *) &in[istride * y];
         uint32_t *orow = (uint32_t *) &out[ostride * y];
         for (int x = 0; x < w; ++x) {
             uint32_t pval = irow[x];
             uint8_t aval = (pval >> 24);
-            uint8_t rval = (pval >> 16) & 0xFF;
-            uint8_t gval = (pval >> 8) & 0xFF;
-            uint8_t bval = pval & 0xFF;
-            // multiplied = separate * alpha / 255
-            // separate = rint(multiplied * 255 / alpha)
-            //          = floor(multiplied * 255 / alpha + 0.5)
-            //          = floor((multiplied * 255 + 0.5 * alpha) / alpha)
-            //          = floor((multiplied * 255 + floor(0.5 * alpha)) / alpha)
-            int div = (int) aval;
-            int add = div / 2;
-            if (aval) {
+            if (aval == 0) {
+                if (vc->opt_fixtrans) {
+                    // find neighbor with highest alpha
+                    int ymin = FFMAX(y - 1, 0);
+                    int ymax = FFMIN(y + 1, h - 1);
+                    int xmin = FFMAX(x - 1, 0);
+                    int xmax = FFMIN(x + 1, w - 1);
+                    uint32_t bestpval = 0;
+                    uint8_t bestaval = 0;
+                    for (int yn = ymin; yn <= ymax; ++yn)
+                    {
+                        uint32_t *inrow = (uint32_t *) &in[istride * yn];
+                        for (int xn = xmin; xn <= xmax; ++xn)
+                        {
+                            uint32_t pnval = inrow[xn];
+                            uint8_t anval = (pnval >> 24);
+                            if (anval > bestaval) {
+                                bestaval = anval;
+                                bestpval = pnval;
+                            }
+                        }
+                    }
+                    // use its color, but with zero alpha
+                    if (bestaval) {
+                        uint8_t rval = (bestpval >> 16) & 0xFF;
+                        uint8_t gval = (bestpval >> 8) & 0xFF;
+                        uint8_t bval = bestpval & 0xFF;
+                        int div = bestaval;
+                        int add = div / 2;
+                        rval = FFMIN(255, (rval * 255 + add) / div);
+                        gval = FFMIN(255, (gval * 255 + add) / div);
+                        bval = FFMIN(255, (bval * 255 + add) / div);
+                        orow[x] = bval + (gval << 8) + (rval << 16);
+                    } else {
+                        // all neighbors are zero, so it's ok to make this one
+                        // zero too
+                        orow[x] = 0;
+                    }
+                } else {
+                    orow[x] = 0;
+                }
+            } else {
+                uint8_t rval = (pval >> 16) & 0xFF;
+                uint8_t gval = (pval >> 8) & 0xFF;
+                uint8_t bval = pval & 0xFF;
+                int div = aval;
+                int add = div / 2;
                 rval = FFMIN(255, (rval * 255 + add) / div);
                 gval = FFMIN(255, (gval * 255 + add) / div);
                 bval = FFMIN(255, (bval * 255 + add) / div);
@@ -525,7 +564,7 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
                 // need to un-premultiply alpha (I know this will scale wrong,
                 // but we really can't afford calling libswscale here)
                 uint8_t *bmp = talloc_size(vc, b->w * b->h * 4);
-                unpremultiply_BGR32(bmp, b->w * 4,
+                unpremultiply_BGR32(vo, bmp, b->w * 4,
                     b->bitmap, b->stride, b->w, b->h);
                 SDL_ConvertPixels(
                     b->w, b->h, SDL_PIXELFORMAT_ARGB8888,
@@ -640,15 +679,17 @@ static int preinit(struct vo *vo, const char *arg)
         SDL_SetHintWithPriority(SDL_HINT_RENDER_OPENGL_SHADERS, "0",
                 SDL_HINT_OVERRIDE);
 
-    if (vc->opt_scale == 0)
+    if (vc->opt_scale == 0) {
         SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, "0",
                 SDL_HINT_OVERRIDE);
-    else if (vc->opt_scale == 1)
+        vc->opt_fixtrans = false; // fixtrans is unneeded with nearest neighbor
+    } else if (vc->opt_scale == 1) {
         SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, "1",
                 SDL_HINT_OVERRIDE);
-    else if (vc->opt_scale == 2)
+    } else if (vc->opt_scale == 2) {
         SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, "2",
                 SDL_HINT_OVERRIDE);
+    }
 
     if (vo_vsync)
         SDL_SetHintWithPriority(SDL_HINT_RENDER_VSYNC, "1",
@@ -873,11 +914,13 @@ const struct vo_driver video_out_sdl2 = {
         .opt_driver = "",
         .opt_shaders = true,
         .opt_scale = 1,
+        .opt_fixtrans = true,
     },
     .options = (const struct m_option[]) {
         OPT_STRING("driver", opt_driver, 0),
         OPT_MAKE_FLAGS("shaders", opt_shaders, 0),
         OPT_INTRANGE("scale", opt_scale, 0, -1, 2),
+        OPT_MAKE_FLAGS("fixtrans", opt_fixtrans, 0),
         {0},
     },
     .preinit = preinit,
