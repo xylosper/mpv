@@ -230,6 +230,28 @@ static void check_resize(struct vo *vo)
         resize(vo, w, h);
 }
 
+static void set_fullscreen(struct vo *vo, int fs)
+{
+    struct priv *vc = vo->priv;
+    struct MPOpts *opts = vo->opts;
+
+    if (opts->vidmode) {
+        SDL_SetWindowDisplayMode(vc->window, NULL);
+    } else {
+        SDL_DisplayMode mode;
+        if (!SDL_GetCurrentDisplayMode(SDL_GetWindowDisplay(vc->window), &mode))
+            SDL_SetWindowDisplayMode(vc->window, &mode);
+    }
+
+    if (SDL_SetWindowFullscreen(vc->window, vo_fs)) {
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_SetWindowFullscreen failed\n");
+        return;
+    }
+
+    vo_fs = fs;
+    force_resize(vo);
+}
+
 static int config(struct vo *vo, uint32_t width, uint32_t height,
                   uint32_t d_width, uint32_t d_height, uint32_t flags,
                   uint32_t format)
@@ -276,29 +298,14 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
 
     resize(vo, d_width, d_height);
 
-    if (flags & VOFLAG_FULLSCREEN) {
-        if (SDL_SetWindowFullscreen(vc->window, 1))
-            mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_SetWindowFullscreen failed\n");
-        else
-            vo_fs = 1;
-    }
+    if (flags & VOFLAG_FULLSCREEN)
+        set_fullscreen(vo, 1);
 
     SDL_ShowWindow(vc->window);
 
     check_resize(vo);
 
     return 0;
-}
-
-static void toggle_fullscreen(struct vo *vo)
-{
-    struct priv *vc = vo->priv;
-    vo_fs = !vo_fs;
-    if (SDL_SetWindowFullscreen(vc->window, vo_fs)) {
-        vo_fs = !vo_fs;
-        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_SetWindowFullscreen failed\n");
-    }
-    force_resize(vo);
 }
 
 static void flip_page(struct vo *vo)
@@ -651,7 +658,6 @@ static bool MP_SDL_IsGoodRenderer(int n, const char *driver_name_wanted)
 static int preinit(struct vo *vo, const char *arg)
 {
     struct priv *vc = vo->priv;
-    struct MPOpts *opts = vo->opts;
 
     int i, j;
 
@@ -663,14 +669,6 @@ static int preinit(struct vo *vo, const char *arg)
     // predefine SDL defaults (SDL env vars shall override)
     SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, "1",
             SDL_HINT_DEFAULT);
-
-    // turn off XVidmode etc. unless -vm
-    if (!opts->vidmode) {
-        SDL_SetHintWithPriority(SDL_HINT_VIDEO_X11_XVIDMODE, "0",
-                SDL_HINT_OVERRIDE);
-        SDL_SetHintWithPriority(SDL_HINT_VIDEO_X11_XRANDR, "0",
-                SDL_HINT_OVERRIDE);
-    }
 
     // predefine MPV options (SDL env vars shall be overridden)
     if (vc->opt_driver && *vc->opt_driver)
@@ -879,7 +877,7 @@ static int control(struct vo *vo, uint32_t request, void *data)
         draw_image(vo, (mp_image_t *)data, vo->next_pts);
         return 0;
     case VOCTRL_FULLSCREEN:
-        toggle_fullscreen(vo);
+        set_fullscreen(vo, !vo_fs);
         return 1;
     case VOCTRL_PAUSE:
         return vc->int_pause = 1;
