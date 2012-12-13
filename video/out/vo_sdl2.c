@@ -197,8 +197,6 @@ struct priv {
 
     // options
     const char *opt_driver;
-    bool opt_shaders;
-    int opt_scale;
     bool opt_fixtrans;
 };
 
@@ -434,11 +432,9 @@ static void unpremultiply_BGR32(struct vo *vo, unsigned char *out, int ostride,
                     int xmax = FFMIN(x + 1, w - 1);
                     uint32_t bestpval = 0;
                     uint8_t bestaval = 0;
-                    for (int yn = ymin; yn <= ymax; ++yn)
-                    {
+                    for (int yn = ymin; yn <= ymax; ++yn) {
                         uint32_t *inrow = (uint32_t *) &in[istride * yn];
-                        for (int xn = xmin; xn <= xmax; ++xn)
-                        {
+                        for (int xn = xmin; xn <= xmax; ++xn) {
                             uint32_t pnval = inrow[xn];
                             uint8_t anval = (pnval >> 24);
                             if (anval > bestaval) {
@@ -675,25 +671,6 @@ static int preinit(struct vo *vo, const char *arg)
         SDL_SetHintWithPriority(SDL_HINT_RENDER_DRIVER, vc->opt_driver,
                 SDL_HINT_OVERRIDE);
 
-    if (vc->opt_shaders)
-        SDL_SetHintWithPriority(SDL_HINT_RENDER_OPENGL_SHADERS, "1",
-                SDL_HINT_OVERRIDE);
-    else
-        SDL_SetHintWithPriority(SDL_HINT_RENDER_OPENGL_SHADERS, "0",
-                SDL_HINT_OVERRIDE);
-
-    if (vc->opt_scale == 0) {
-        SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, "0",
-                SDL_HINT_OVERRIDE);
-        vc->opt_fixtrans = false; // fixtrans is unneeded with nearest neighbor
-    } else if (vc->opt_scale == 1) {
-        SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, "1",
-                SDL_HINT_OVERRIDE);
-    } else if (vc->opt_scale == 2) {
-        SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, "2",
-                SDL_HINT_OVERRIDE);
-    }
-
     if (vo_vsync)
         SDL_SetHintWithPriority(SDL_HINT_RENDER_VSYNC, "1",
                 SDL_HINT_OVERRIDE);
@@ -920,14 +897,10 @@ const struct vo_driver video_out_sdl2 = {
     .priv_size = sizeof(struct priv),
     .priv_defaults = &(const struct priv) {
         .opt_driver = "",
-        .opt_shaders = true,
-        .opt_scale = 1,
         .opt_fixtrans = true,
     },
     .options = (const struct m_option[]) {
         OPT_STRING("driver", opt_driver, 0),
-        OPT_MAKE_FLAGS("shaders", opt_shaders, 0),
-        OPT_INTRANGE("scale", opt_scale, 0, -1, 2),
         OPT_MAKE_FLAGS("fixtrans", opt_fixtrans, 0),
         {0},
     },
