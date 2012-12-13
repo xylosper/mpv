@@ -535,10 +535,10 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
         };
         switch (imgs->format) {
         case SUBBITMAP_LIBASS:
-            target->alpha = 255 - ((b->libass.color >> 0) & 0xff);
-            target->color[0] = ((b->libass.color >>  8) & 0xff);
+            target->color[0] = ((b->libass.color >> 24) & 0xff);
             target->color[1] = ((b->libass.color >> 16) & 0xff);
-            target->color[2] = ((b->libass.color >> 24) & 0xff);
+            target->color[2] = ((b->libass.color >>  8) & 0xff);
+            target->alpha = 255 - ((b->libass.color >> 0) & 0xff);
             if (surfpixels) {
                 // damn SDL has no support for 8bit gray...
                 // idea: could instead hand craft a SDL_Surface with palette
@@ -556,10 +556,10 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
             }
             break;
         case SUBBITMAP_RGBA:
-            target->alpha = 255;
             target->color[0] = 255;
             target->color[1] = 255;
             target->color[2] = 255;
+            target->alpha = 255;
             if (surfpixels) {
                 // need to un-premultiply alpha (I know this will scale wrong,
                 // but we really can't afford calling libswscale here)
