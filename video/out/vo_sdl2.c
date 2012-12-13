@@ -196,7 +196,6 @@ struct priv {
     } osd_surfaces[MAX_OSD_PARTS];
 
     // options
-    const char *opt_driver;
     bool opt_fixtrans;
 };
 
@@ -667,10 +666,6 @@ static int preinit(struct vo *vo, const char *arg)
             SDL_HINT_DEFAULT);
 
     // predefine MPV options (SDL env vars shall be overridden)
-    if (vc->opt_driver && *vc->opt_driver)
-        SDL_SetHintWithPriority(SDL_HINT_RENDER_DRIVER, vc->opt_driver,
-                SDL_HINT_OVERRIDE);
-
     if (vo_vsync)
         SDL_SetHintWithPriority(SDL_HINT_RENDER_VSYNC, "1",
                 SDL_HINT_OVERRIDE);
@@ -896,11 +891,9 @@ const struct vo_driver video_out_sdl2 = {
     },
     .priv_size = sizeof(struct priv),
     .priv_defaults = &(const struct priv) {
-        .opt_driver = "",
         .opt_fixtrans = true,
     },
     .options = (const struct m_option[]) {
-        OPT_STRING("driver", opt_driver, 0),
         OPT_MAKE_FLAGS("fixtrans", opt_fixtrans, 0),
         {0},
     },
