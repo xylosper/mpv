@@ -651,6 +651,7 @@ static bool MP_SDL_IsGoodRenderer(int n, const char *driver_name_wanted)
 static int preinit(struct vo *vo, const char *arg)
 {
     struct priv *vc = vo->priv;
+    struct MPOpts *opts = vo->opts;
 
     int i, j;
 
@@ -658,14 +659,18 @@ static int preinit(struct vo *vo, const char *arg)
         mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] already initialized\n");
         return -1;
     }
-    if (SDL_InitSubSystem(SDL_INIT_VIDEO)) {
-        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_Init failed\n");
-        return -1;
-    }
 
     // predefine SDL defaults (SDL env vars shall override)
     SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, "1",
             SDL_HINT_DEFAULT);
+
+    // turn off XVidmode etc. unless -vm
+    if (!opts->vidmode) {
+        SDL_SetHintWithPriority(SDL_HINT_VIDEO_X11_XVIDMODE, "0",
+                SDL_HINT_OVERRIDE);
+        SDL_SetHintWithPriority(SDL_HINT_VIDEO_X11_XRANDR, "0",
+                SDL_HINT_OVERRIDE);
+    }
 
     // predefine MPV options (SDL env vars shall be overridden)
     if (vc->opt_driver && *vc->opt_driver)
@@ -697,6 +702,11 @@ static int preinit(struct vo *vo, const char *arg)
     else
         SDL_SetHintWithPriority(SDL_HINT_RENDER_VSYNC, "0",
                 SDL_HINT_OVERRIDE);
+
+    if (SDL_InitSubSystem(SDL_INIT_VIDEO)) {
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_Init failed\n");
+        return -1;
+    }
 
     vc->window = SDL_CreateWindow("MPV",
                                   SDL_WINDOWPOS_UNDEFINED,
