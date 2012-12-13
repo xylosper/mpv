@@ -68,7 +68,6 @@ enum demuxer_type {
     DEMUXER_TYPE_AVS,
     DEMUXER_TYPE_AAC,
     DEMUXER_TYPE_MPC,
-    DEMUXER_TYPE_LAVF_PREFERRED,
     DEMUXER_TYPE_MNG,
     DEMUXER_TYPE_EDL,
     DEMUXER_TYPE_CUE,
@@ -121,6 +120,7 @@ typedef struct demux_stream {
     int pack_no;           // serial number of packet
     bool keyframe;         // keyframe flag of current packet
 //---------------
+    int fill_count;        // number of unsuccessful tries to get a packet
     int packs;            // number of packets in buffer
     int bytes;            // total bytes of packets in buffer
     demux_packet_t *first; // read to current buffer from here

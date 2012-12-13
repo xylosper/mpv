@@ -112,6 +112,8 @@ Command line switches
     -sub-fuzziness                      --autosub-match
     -subfont-text-scale                 --sub-scale
     -spugauss                           --sub-gauss
+    -vobsub                             --sub (pass the .idx file)
+    -ass-bottom-margin                  --vf=sub=bottom:top
     =================================== ===================================
 
 input.conf and slave commands

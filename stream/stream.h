@@ -81,7 +81,7 @@
 #define STREAM_ERROR 0
 #define STREAM_OK    1
 
-#define MAX_STREAM_PROTOCOLS 10
+#define MAX_STREAM_PROTOCOLS 20
 
 #define STREAM_CTRL_RESET 0
 #define STREAM_CTRL_GET_TIME_LENGTH 1
@@ -175,6 +175,7 @@ typedef struct stream {
   void* cache_data;
   void* priv; // used for DVD, TV, RTSP etc
   char* url;  // strdup() of filename/url
+  char *mime_type; // when HTTP streaming is used
   char *lavf_type; // name of expected demuxer type for lavf
   struct MPOpts *opts;
   streaming_ctrl_t *streaming_ctrl;

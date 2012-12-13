@@ -16,10 +16,11 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include "config.h"
+#include <libavformat/avformat.h>
+#include <libavformat/avio.h>
+#include <libavutil/opt.h>
 
-#include "libavformat/avformat.h"
-#include "libavformat/avio.h"
+#include "config.h"
 #include "core/mp_msg.h"
 #include "stream.h"
 #include "core/m_option.h"
@@ -94,9 +95,9 @@ static const char * const prefix[] = { "lavf://", "ffmpeg://" };
 static int open_f(stream_t *stream, int mode, void *opts, int *file_format)
 {
     int flags = 0;
-    const char *filename;
     AVIOContext *avio = NULL;
     int res = STREAM_ERROR;
+    void *temp = talloc_new(NULL);
 
     if (mode == STREAM_READ)
         flags = AVIO_FLAG_READ;
@@ -108,9 +109,8 @@ static int open_f(stream_t *stream, int mode, void *opts, int *file_format)
         goto out;
     }
 
-    if (stream->url)
-        filename = stream->url;
-    else {
+    const char *filename = stream->url;
+    if (!filename) {
         mp_msg(MSGT_OPEN, MSGL_ERR, "[ffmpeg] No URL\n");
         goto out;
     }
@@ -129,8 +129,24 @@ static int open_f(stream_t *stream, int mode, void *opts, int *file_format)
     }
     mp_msg(MSGT_OPEN, MSGL_V, "[ffmpeg] Opening %s\n", filename);
 
+    // Replace "mms://" with "mmsh://", so that most mms:// URLs just work.
+    bstr b_filename = bstr0(filename);
+    if (bstr_eatstart0(&b_filename, "mms://") ||
+        bstr_eatstart0(&b_filename, "mmshttp://"))
+    {
+        filename = talloc_asprintf(temp, "mmsh://%.*s", BSTR_P(b_filename));
+    }
+
     if (avio_open(&avio, filename, flags) < 0)
         goto out;
+
+#if LIBAVFORMAT_VERSION_MICRO >= 100
+    if (avio->av_class) {
+        uint8_t *mt = NULL;
+        if (av_opt_get(avio, "mime_type", AV_OPT_SEARCH_CHILDREN, &mt) >= 0)
+            stream->mime_type = talloc_strdup(stream, mt);
+    }
+#endif
 
     char *rtmp[] = {"rtmp:", "rtmpt:", "rtmpe:", "rtmpte:", "rtmps:"};
     for (int i = 0; i < FF_ARRAY_ELEMS(rtmp); i++)
@@ -157,6 +173,7 @@ static int open_f(stream_t *stream, int mode, void *opts, int *file_format)
     res = STREAM_OK;
 
 out:
+    talloc_free(temp);
     return res;
 }
 
@@ -166,7 +183,8 @@ const stream_info_t stream_info_ffmpeg = {
   "",
   "",
   open_f,
-  { "lavf", "ffmpeg", "rtmp", "rtsp", "http", "https", NULL },
+  { "lavf", "ffmpeg", "rtmp", "rtsp", "http", "https", "mms", "mmst", "mmsh",
+    "mmshttp", NULL },
   NULL,
   1 // Urls are an option string
 };

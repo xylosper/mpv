@@ -422,6 +422,7 @@ int video_read_frame(sh_video_t* sh_video,float* frame_time_ptr,unsigned char** 
     int picture_coding_type=0;
     int in_size=0;
     video_codec_t video_codec = find_video_codec(sh_video);
+    sh_video->needs_parsing = video_codec != VIDEO_OTHER;
 
     *start=NULL;
 
@@ -590,7 +591,6 @@ int video_read_frame(sh_video_t* sh_video,float* frame_time_ptr,unsigned char** 
       }
       break;
       case DEMUXER_TYPE_LAVF:
-      case DEMUXER_TYPE_LAVF_PREFERRED:
         if((int)sh_video->fps==1000 || (int)sh_video->fps<=1){
           double next_pts = ds_get_next_pts(d_video);
           double d= (next_pts != MP_NOPTS_VALUE) ? next_pts - d_video->pts : d_video->pts-pts1;

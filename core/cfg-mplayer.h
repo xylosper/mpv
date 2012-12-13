@@ -394,6 +394,9 @@ const m_option_t common_opts[] = {
     OPT_STRINGLIST("alang", audio_lang, 0),
     OPT_STRINGLIST("slang", sub_lang, 0),
 
+    OPT_CHOICE("audio-display", audio_display, 0,
+               ({"no", 0}, {"attachment", 1})),
+
     OPT_STRING("quvi-format", quvi_format, 0),
 
     { "rawaudio", (void *)&demux_rawaudio_opts, CONF_TYPE_SUBCONFIG, 0, 0, 0, NULL},
@@ -498,8 +501,6 @@ const m_option_t common_opts[] = {
     {"subfps", &sub_fps, CONF_TYPE_FLOAT, 0, 0.0, 10.0, NULL},
     OPT_MAKE_FLAGS("autosub", sub_auto, 0),
     {"sub-forced-only", &forced_subs_only, CONF_TYPE_FLAG, 0, 0, 1, NULL},
-    // specify IFO file for VOBSUB subtitle
-    {"ifo", &spudec_ifo, CONF_TYPE_STRING, 0, 0, 0, NULL},
     // enable Closed Captioning display
     {"overlapsub", &suboverlap_enabled, CONF_TYPE_FLAG, 0, 0, 2, NULL},
     {"sub-no-text-pp", &sub_no_text_pp, CONF_TYPE_FLAG, 0, 0, 1, NULL},
@@ -511,8 +512,6 @@ const m_option_t common_opts[] = {
     OPT_MAKE_FLAGS("ass", ass_enabled, 0),
     OPT_FLOATRANGE("sub-scale", sub_scale, 0, 0, 100),
     OPT_FLOATRANGE("ass-line-spacing", ass_line_spacing, 0, -1000, 1000),
-    OPT_INTRANGE("ass-top-margin", ass_top_margin, 0, 0, 2000),
-    OPT_INTRANGE("ass-bottom-margin", ass_bottom_margin, 0, 0, 2000),
     OPT_MAKE_FLAGS("ass-use-margins", ass_use_margins, 0),
     OPT_MAKE_FLAGS("ass-vsfilter-aspect-compat", ass_vsfilter_aspect_compat, 0),
     OPT_MAKE_FLAGS("embeddedfonts", use_embedded_fonts, 0),
@@ -648,9 +647,6 @@ const m_option_t mplayer_opts[]={
                ({"0", 0}, {"1", 1}, {"2", 2}, {"3", 3})),
     OPT_INTRANGE("osd-duration", osd_duration, 0, 0, 3600000),
     OPT_MAKE_FLAGS("osd-fractions", osd_fractions, 0),
-
-    OPT_STRING("vobsub", vobsub_name, 0),
-    {"vobsubid", &vobsub_id, CONF_TYPE_INT, CONF_RANGE, 0, 31, NULL},
 
     {"sstep", &step_sec, CONF_TYPE_DOUBLE, CONF_MIN, 0, 0, NULL},
 

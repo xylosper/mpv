@@ -124,9 +124,7 @@ SOURCES = talloc.c \
           audio/mixer.c \
           audio/reorder_ch.c \
           audio/decode/ad.c \
-          audio/decode/ad_dvdpcm.c \
           audio/decode/ad_lavc.c \
-          audio/decode/ad_pcm.c \
           audio/decode/ad_spdif.c      \
           audio/decode/dec_audio.c \
           audio/filter/af.c \
@@ -226,7 +224,6 @@ SOURCES = talloc.c \
           sub/sub.c \
           sub/subassconvert.c \
           sub/subreader.c \
-          sub/vobsub.c \
           video/csputils.c \
           video/fmt-conversion.c \
           video/image_writer.c \

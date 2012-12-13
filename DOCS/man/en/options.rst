@@ -118,10 +118,6 @@
     text subtitles only, because ASS subtitles include their own styling
     information.
 
---ass-bottom-margin=<value>
-    Adds a black band at the bottom of the frame. The SSA/ASS renderer can
-    place subtitles there (with ``--ass-use-margins``).
-
 --ass-force-style=<[Style.]Param=Value[,...]>
     Override some style or script info parameters.
 
@@ -156,10 +152,6 @@
           (Default.)
     :no:  Render subtitles as forced by subtitle scripts.
 
---ass-top-margin=<value>
-    Adds a black band at the top of the frame. The SSA/ASS renderer can place
-    toptitles there (with ``--ass-use-margins``).
-
 --ass-use-margins
     Enables placing toptitles and subtitles in black borders when they are
     available.
@@ -186,6 +178,16 @@
     name to force it, this will skip some checks! Give the demuxer name as
     printed by ``--audio-demuxer=help``. ``--audio-demuxer=audio`` forces MP3.
 
+--audio-display=<no|attachment>
+    Setting this option to ``attachment`` (default) will display image
+    attachments when playing audio files. It will display the first image
+    found, and additional images are available as video streams.
+
+    Setting this option to ``no`` disables display of video entirely when
+    playing audio files.
+
+    This option has no influence on files with normal video tracks.
+
 --audiofile=<filename>
     Play audio from an external file (WAV, MP3 or Ogg Vorbis) while viewing a
     movie.
@@ -204,6 +206,8 @@
     :exact: exact match
     :fuzzy: Load all subs containing movie name.
     :all:   Load all subs in the current and ``--sub-paths`` directories.
+
+    (Default: exact.)
 
 --autosync=<factor>
     Gradually adjusts the A/V sync based on audio delay measurements.
@@ -439,10 +443,14 @@
     (network only)
     Support cookies when making HTTP requests. Disabled by default.
 
+    *WARNING*: works with the deprecated ``mp_http://`` protocol only.
+
 --cookies-file=<filename>
     (network only)
     Read HTTP cookies from <filename>. The file is
     assumed to be in Netscape format.
+
+    *WARNING*: works with the deprecated ``mp_http://`` protocol only.
 
 --correct-pts, --no-correct-pts
     Switches mpv to a mode where timestamps for video frames are
@@ -743,6 +751,8 @@
 --http-header-fields=<field1,field2>
     Set custom HTTP fields when accessing HTTP stream.
 
+    *WARNING*: works with the deprecated ``mp_http://`` protocol only.
+
     *EXAMPLE*:
 
             ``mpv --http-header-fields='Field1: value1','Field2: value2' http://localhost:1234``
@@ -778,10 +788,6 @@
 
     *NOTE*: This option only works if the underlying media supports seeking
     (i.e. not with stdin, pipe, etc).
-
---ifo=<file>
-    Indicate the VOBsub IFO file that will be used to load palette and frame
-    size for VOBsub subtitles.
 
 --ignore-start
     Matters with the builtin AVI demuxer only, which is not enabled by default.
@@ -854,6 +860,8 @@
 --ipv4-only-proxy
     Skip any HTTP proxy for IPv6 addresses. It will still be used for IPv4
     connections.
+
+    *WARNING*: works with the deprecated ``mp_http://`` protocol only.
 
 --joystick, --no-joystick
     Enable/disable joystick support. Enabled by default.
@@ -1030,6 +1038,12 @@
 
     analyzeduration=<value>
         Maximum length in seconds to analyze the stream properties.
+    probescore=<1-100>
+        Minimum required libavformat probe score. Lower values will require
+        less data to be loaded (makes streams start faster), but makes file
+        format detection less reliable. Can be used to force auto-detected
+        libavformat demuxers, even if libavformat considers the detection not
+        reliable enough. (Default: 26.)
     format=<value>
         Force a specific libavformat demuxer.
     o=<key>=<value>[,<key>=<value>[,...]]
@@ -1337,6 +1351,8 @@
     Used with some network protocols. Specify password for HTTP authentication.
     See also ``--user``.
 
+    *WARNING*: works with the deprecated ``mp_http://`` protocol only.
+
 --playing-msg=<string>
     Print out a string before starting playback. The string is expanded for
     properties, e.g. ``--playing-msg=file: \${filename}`` will print the string
@@ -1393,8 +1409,12 @@
 --prefer-ipv4
     Use IPv4 on network connections. Falls back on IPv6 automatically.
 
+    *WARNING*: works with the deprecated ``mp_http://`` protocol only.
+
 --prefer-ipv6
     Use IPv6 on network connections. Falls back on IPv4 automatically.
+
+    *WARNING*: works with the deprecated ``mp_http://`` protocol only.
 
 --priority=<prio>
     (Windows only.)
@@ -1580,6 +1600,8 @@
 --referrer=<string>
     Specify a referrer path or URL for HTTP requests.
 
+    *WARNING*: works with the deprecated ``mp_http://`` protocol only.
+
 --reuse-socket
     (udp:// only)
     Allows a socket to be reused by other processes as soon as it is closed.
@@ -1692,7 +1714,7 @@
 --sid=<ID|auto|no>
     Display the subtitle stream specified by <ID> (0-31). ``auto`` selects the
     default, ``no`` disables subtitles.
-    See also ``--slang``, ``--vobsubid``, ``--no-sub``.
+    See also ``--slang``, ``--no-sub``.
 
 --slang=<languagecode[,languagecode,...]>
     Specify a priority list of subtitle languages to use. Different container
@@ -1883,7 +1905,9 @@
     Open the given file with a demuxer, and use its subtitle streams. Same as
     ``--audiofile``, but for subtitle streams.
 
-    Use ``--sub`` for normal text subtitle files.
+    *NOTE*: use ``--sub`` for subtitle files. This option is useless, unless
+    you want to force libavformat subtitle parsers instead of libass or
+    internal subtitle parsers.
 
 --subfps=<rate>
     Specify the framerate of the subtitle file (default: movie fps).
@@ -2167,8 +2191,12 @@
     Used with some network protocols.
     Specify username for HTTP authentication. See also ``--passwd``.
 
+    *WARNING*: works with the deprecated ``mp_http://`` protocol only.
+
 --user-agent=<string>
     Use <string> as user agent for HTTP streaming.
+
+    *WARNING*: works with the deprecated ``mp_http://`` protocol only.
 
 -v
     Increment verbosity level, one level for each ``-v`` found on the command
@@ -2209,13 +2237,6 @@
     interactive use you'd normally specify a single one to use, but in
     configuration files specifying a list of fallbacks may make sense. See
     `video_outputs` for details and descriptions of available drivers.
-
---vobsub=<file>
-    Specify a VOBsub file to use for subtitles. Has to be the full pathname
-    without extension, i.e. without the ``.idx``, ``.ifo`` or ``.sub``.
-
---vobsubid=<0-31>
-    Specify the VOBsub subtitle ID.
 
 --volstep=<0-100>
     Set the step size of mixer volume changes in percent of the whole range
