@@ -395,7 +395,7 @@ static void uninit(struct vo *vo)
 {
     struct priv *vc = vo->priv;
     free_mp_image(vc->ssmpi);
-    SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_TIMER);
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
     talloc_free(vc);
 }
 
@@ -658,7 +658,7 @@ static int preinit(struct vo *vo, const char *arg)
         mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] already initialized\n");
         return -1;
     }
-    if (SDL_Init(SDL_INIT_VIDEO)) {
+    if (SDL_InitSubSystem(SDL_INIT_VIDEO)) {
         mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_Init failed\n");
         return -1;
     }
