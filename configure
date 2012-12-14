@@ -2325,19 +2325,10 @@ fi #if win32; then
 
 echocheck "SDL2"
 if test "$_sdl2" = auto ; then
-  _sdl2=no
-  if ( sdl2-config --version ) >> "$TMPLOG" 2>&1 ; then
-  cat > $TMPC << EOF
-#include <SDL.h>
-int main(void) { SDL_Init(0); return 0; }
-EOF
-  cc_check $(sdl2-config --libs --cflags) && _sdl2=yes
-  fi
+  pkg_config_add 'sdl2' && _sdl2=yes
 fi
 if test "$_sdl2" = yes ; then
   def_sdl2='#define CONFIG_SDL2 1'
-  extra_cflags="$extra_cflags $(sdl2-config --cflags)"
-  libs_mplayer="$libs_mplayer $(sdl2-config --libs)"
   vomodules="sdl2 $vomodules"
 else
   def_sdl2='#undef CONFIG_SDL2'
