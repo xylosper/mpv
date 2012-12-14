@@ -298,7 +298,7 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
     if (flags & VOFLAG_FULLSCREEN)
         set_fullscreen(vo, 1);
 
-    SDL_SetWindowTitle(vc->window, vo_get_window_title());
+    SDL_SetWindowTitle(vc->window, vo_get_window_title(vo));
 
     SDL_ShowWindow(vc->window);
 
