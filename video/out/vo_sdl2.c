@@ -3,10 +3,6 @@
  *
  * by divVerent <divVerent@xonotic.org>
  *
- * Some functions/codes/ideas are from x11 and aalib vo
- *
- * TODO: support draw_alpha?
- *
  * This file is part of MPlayer.
  *
  * MPlayer is free software; you can redistribute it and/or modify
@@ -35,19 +31,23 @@
 
 #include <SDL.h>
 
-#include "config.h"
-#include "vo.h"
+#include "core/input/input.h"
+#include "core/input/keycodes.h"
+#include "core/mp_fifo.h"
+#include "core/mp_msg.h"
+#include "core/options.h"
+
+#include "osdep/timer.h"
+
 #include "sub/sub.h"
+
 #include "video/mp_image.h"
 #include "video/vfcap.h"
+
 #include "aspect.h"
 #include "bitmap_packer.h"
-
-#include "core/input/keycodes.h"
-#include "core/input/input.h"
-#include "core/mp_msg.h"
-#include "core/mp_fifo.h"
-#include "core/options.h"
+#include "config.h"
+#include "vo.h"
 
 struct formatmap_entry {
     Uint32 sdl;
@@ -194,6 +194,8 @@ struct priv {
         int render_count;
         struct bitmap_packer *packer;
     } osd_surfaces[MAX_OSD_PARTS];
+    unsigned int mouse_timer;
+    int mouse_hidden;
 
     // options
     bool opt_fixtrans;
@@ -240,7 +242,7 @@ static void set_fullscreen(struct vo *vo, int fs)
             SDL_SetWindowDisplayMode(vc->window, &mode);
     }
 
-    if (SDL_SetWindowFullscreen(vc->window, vo_fs)) {
+    if (SDL_SetWindowFullscreen(vc->window, fs)) {
         mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_SetWindowFullscreen failed\n");
         return;
     }
@@ -313,7 +315,27 @@ static void flip_page(struct vo *vo)
 
 static void check_events(struct vo *vo)
 {
+    struct priv *vc = vo->priv;
+    struct MPOpts *opts = vo->opts;
     SDL_Event ev;
+
+    if (opts->cursor_autohide_delay >= 0) {
+        if (!vc->mouse_hidden && (GetTimerMS() - vc->mouse_timer >= opts->cursor_autohide_delay)) {
+            SDL_ShowCursor(0);
+            vc->mouse_hidden = 1;
+        }
+    } else if (opts->cursor_autohide_delay == -1) {
+        if (vc->mouse_hidden) {
+            SDL_ShowCursor(1);
+            vc->mouse_hidden = 0;
+        }
+    } else if (opts->cursor_autohide_delay == -2) {
+        if (!vc->mouse_hidden) {
+            SDL_ShowCursor(0);
+            vc->mouse_hidden = 1;
+        }
+    }
+
     while (SDL_PollEvent(&ev)) {
         switch (ev.type) {
         case SDL_WINDOWEVENT:
@@ -376,16 +398,28 @@ static void check_events(struct vo *vo)
         }
         break;
         case SDL_MOUSEMOTION:
-            // TODO opts->cursor_autohide_delay
+            if (opts->cursor_autohide_delay >= 0) {
+                SDL_ShowCursor(1);
+                vc->mouse_hidden = 0;
+                vc->mouse_timer = GetTimerMS();
+            }
             vo_mouse_movement(vo, ev.motion.x, ev.motion.y);
             break;
         case SDL_MOUSEBUTTONDOWN:
-            // TODO opts->cursor_autohide_delay
+            if (opts->cursor_autohide_delay >= 0) {
+                SDL_ShowCursor(1);
+                vc->mouse_hidden = 0;
+                vc->mouse_timer = GetTimerMS();
+            }
             mplayer_put_key(vo->key_fifo,
                             (MOUSE_BTN0 + ev.button.button - 1) | MP_KEY_DOWN);
             break;
         case SDL_MOUSEBUTTONUP:
-            // TODO opts->cursor_autohide_delay
+            if (opts->cursor_autohide_delay >= 0) {
+                SDL_ShowCursor(1);
+                vc->mouse_hidden = 0;
+                vc->mouse_timer = GetTimerMS();
+            }
             mplayer_put_key(vo->key_fifo,
                             (MOUSE_BTN0 + ev.button.button - 1));
             break;
@@ -728,6 +762,9 @@ static int preinit(struct vo *vo, const char *arg)
 
     // we don't have proper event handling
     vo->wakeup_period = 0.02;
+
+    // initialize the autohide timer properly
+    vc->mouse_timer = GetTimerMS();
 
     return 0;
 }
