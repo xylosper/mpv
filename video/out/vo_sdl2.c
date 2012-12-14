@@ -534,10 +534,6 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
     int surfpitch = 0;
 
     if (imgs->bitmap_id != sfc->bitmap_id) {
-        if (sfc->tex)
-            SDL_DestroyTexture(sfc->tex);
-        sfc->tex = NULL;
-
         if (!sfc->packer)
             sfc->packer = make_packer(vo);
         sfc->packer->padding = 0;
@@ -546,15 +542,28 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
             mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] OSD bitmaps do not fit on "
                    "a surface with the maximum supported size\n");
             return;
-        } else {
+        } else if (r || !sfc->tex) {
+            if (sfc->tex)
+                SDL_DestroyTexture(sfc->tex);
+            sfc->tex = NULL;
             mp_msg(MSGT_VO, MSGL_V, "[sdl2] Allocating a %dx%d surface for "
                    "OSD bitmaps.\n", sfc->packer->w, sfc->packer->h);
-            surfpixels = talloc_size(vc, sfc->packer->w * sfc->packer->h * 4);
-            surfpitch = sfc->packer->w * 4;
-            if (!surfpixels) {
-                mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] Could not create surface\n");
+
+            sfc->tex = SDL_CreateTexture(vc->renderer, vc->osd_format.sdl,
+                                         SDL_TEXTUREACCESS_STREAMING,
+                                         sfc->packer->w, sfc->packer->h);
+            if (!sfc->tex) {
+                mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] Could not create texture\n");
                 return;
             }
+
+            SDL_SetTextureBlendMode(sfc->tex, SDL_BLENDMODE_BLEND);
+        }
+
+        if (SDL_LockTexture(sfc->tex, NULL,
+                            (void **) &surfpixels, &surfpitch)) {
+            mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_LockTexture failed\n");
+            return;
         }
 
         if (sfc->packer->count > sfc->targets_size) {
@@ -621,18 +630,8 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
         sfc->render_count++;
     }
 
-    if (surfpixels) {
-        sfc->tex = SDL_CreateTexture(vc->renderer, vc->osd_format.sdl,
-                                     SDL_TEXTUREACCESS_STATIC, sfc->packer->w,
-                                     sfc->packer->h);
-        if (!surfpixels) {
-            mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] Could not create texture\n");
-            return;
-        }
-        SDL_UpdateTexture(sfc->tex, NULL, surfpixels, surfpitch);
-        talloc_free(surfpixels);
-        SDL_SetTextureBlendMode(sfc->tex, SDL_BLENDMODE_BLEND);
-    }
+    if (surfpixels)
+        SDL_UnlockTexture (sfc->tex);
 
     sfc->bitmap_id = imgs->bitmap_id;
     sfc->bitmap_pos_id = imgs->bitmap_pos_id;
