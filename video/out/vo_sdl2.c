@@ -442,9 +442,13 @@ static void uninit(struct vo *vo)
 
 static struct bitmap_packer *make_packer(struct vo *vo)
 {
+    struct priv *vc = vo->priv;
+
     struct bitmap_packer *packer = talloc_zero(vo, struct bitmap_packer);
-    packer->w_max = 4096; // FIXME is there a maximum size?
-    packer->h_max = 4096; // FIXME is there a maximum size?
+    packer->w_max = vc->renderer_info.max_texture_width ?
+        vc->renderer_info.max_texture_width : INT_MAX;
+    packer->h_max = vc->renderer_info.max_texture_height ?
+        vc->renderer_info.max_texture_height : INT_MAX;
     return packer;
 }
 
