@@ -234,9 +234,9 @@ static void set_fullscreen(struct vo *vo, int fs)
     struct priv *vc = vo->priv;
     struct MPOpts *opts = vo->opts;
 
-    if (opts->vidmode) {
+    if (opts->vidmode)
         SDL_SetWindowDisplayMode(vc->window, NULL);
-    } else {
+    else {
         SDL_DisplayMode mode;
         if (!SDL_GetCurrentDisplayMode(SDL_GetWindowDisplay(vc->window), &mode))
             SDL_SetWindowDisplayMode(vc->window, &mode);
@@ -320,7 +320,8 @@ static void check_events(struct vo *vo)
     SDL_Event ev;
 
     if (opts->cursor_autohide_delay >= 0) {
-        if (!vc->mouse_hidden && (GetTimerMS() - vc->mouse_timer >= opts->cursor_autohide_delay)) {
+        if (!vc->mouse_hidden &&
+            (GetTimerMS() - vc->mouse_timer >= opts->cursor_autohide_delay)) {
             SDL_ShowCursor(0);
             vc->mouse_hidden = 1;
         }
@@ -351,24 +352,24 @@ static void check_events(struct vo *vo)
                 break;
             }
             break;
-        case SDL_TEXTINPUT:
-            {
-                int sdl_mod = SDL_GetModState();
-                int mpv_mod = 0;
-                // we ignore KMOD_LSHIFT, KMOD_RSHIFT and KMOD_RALT because
-                // these are already factored into ev.text.text
-                if (sdl_mod & (KMOD_LCTRL | KMOD_RCTRL))
-                    mpv_mod |= KEY_MODIFIER_CTRL;
-                if (sdl_mod & KMOD_LALT)
-                    mpv_mod |= KEY_MODIFIER_ALT;
-                if (sdl_mod & (KMOD_LGUI | KMOD_RGUI))
-                    mpv_mod |= KEY_MODIFIER_META;
-                struct bstr t = { ev.text.text, strlen(ev.text.text) };
-                mplayer_put_key_utf8(vo->key_fifo, mpv_mod, t);
-            }
+        case SDL_TEXTINPUT: {
+            int sdl_mod = SDL_GetModState();
+            int mpv_mod = 0;
+            // we ignore KMOD_LSHIFT, KMOD_RSHIFT and KMOD_RALT because
+            // these are already factored into ev.text.text
+            if (sdl_mod & (KMOD_LCTRL | KMOD_RCTRL))
+                mpv_mod |= KEY_MODIFIER_CTRL;
+            if (sdl_mod & KMOD_LALT)
+                mpv_mod |= KEY_MODIFIER_ALT;
+            if (sdl_mod & (KMOD_LGUI | KMOD_RGUI))
+                mpv_mod |= KEY_MODIFIER_META;
+            struct bstr t = {
+                ev.text.text, strlen(ev.text.text)
+            };
+            mplayer_put_key_utf8(vo->key_fifo, mpv_mod, t);
             break;
-        case SDL_KEYDOWN:
-        {
+        }
+        case SDL_KEYDOWN: {
             // Issue: we don't know in advance whether this keydown event
             // will ALSO cause a SDL_TEXTINPUT event
             // So we're conservative, and only map non printable keycodes
@@ -395,8 +396,8 @@ static void check_events(struct vo *vo)
                     keycode |= KEY_MODIFIER_META;
                 mplayer_put_key(vo->key_fifo, keycode);
             }
+            break;
         }
-        break;
         case SDL_MOUSEMOTION:
             if (opts->cursor_autohide_delay >= 0) {
                 SDL_ShowCursor(1);
@@ -446,7 +447,8 @@ static struct bitmap_packer *make_packer(struct vo *vo)
 }
 
 static void unpremultiply_BGR32(struct vo *vo, unsigned char *out, int ostride,
-        const unsigned char *in, int istride, int w, int h)
+                                const unsigned char *in, int istride,
+                                int w, int h)
 {
     struct priv *vc = vo->priv;
 
@@ -492,9 +494,8 @@ static void unpremultiply_BGR32(struct vo *vo, unsigned char *out, int ostride,
                         // zero too
                         orow[x] = 0;
                     }
-                } else {
+                } else
                     orow[x] = 0;
-                }
             } else {
                 uint8_t rval = (pval >> 16) & 0xFF;
                 uint8_t gval = (pval >> 8) & 0xFF;
@@ -601,7 +602,7 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
                 // but we really can't afford calling libswscale here)
                 uint8_t *bmp = talloc_size(vc, b->w * b->h * 4);
                 unpremultiply_BGR32(vo, bmp, b->w * 4,
-                    b->bitmap, b->stride, b->w, b->h);
+                                    b->bitmap, b->stride, b->w, b->h);
                 SDL_ConvertPixels(
                     b->w, b->h, SDL_PIXELFORMAT_ARGB8888,
                         bmp, b->w * 4,
@@ -640,9 +641,10 @@ static void draw_osd_part(struct vo *vo, int index)
     for (i = 0; i < sfc->render_count; i++) {
         struct osd_target *target = sfc->targets + i;
         SDL_SetTextureAlphaMod(sfc->tex, sfc->targets[i].alpha);
-        SDL_SetTextureColorMod(sfc->tex, sfc->targets[i].color[0],
-                sfc->targets[i].color[1],
-                sfc->targets[i].color[2]);
+        SDL_SetTextureColorMod(sfc->tex,
+                               sfc->targets[i].color[0],
+                               sfc->targets[i].color[1],
+                               sfc->targets[i].color[2]);
         SDL_RenderCopy(vc->renderer, sfc->tex, &target->source, &target->dest);
     }
 }
@@ -697,15 +699,15 @@ static int preinit(struct vo *vo, const char *arg)
 
     // predefine SDL defaults (SDL env vars shall override)
     SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, "1",
-            SDL_HINT_DEFAULT);
+                            SDL_HINT_DEFAULT);
 
     // predefine MPV options (SDL env vars shall be overridden)
     if (vo_vsync)
         SDL_SetHintWithPriority(SDL_HINT_RENDER_VSYNC, "1",
-                SDL_HINT_OVERRIDE);
+                                SDL_HINT_OVERRIDE);
     else
         SDL_SetHintWithPriority(SDL_HINT_RENDER_VSYNC, "0",
-                SDL_HINT_OVERRIDE);
+                                SDL_HINT_OVERRIDE);
 
     if (SDL_InitSubSystem(SDL_INIT_VIDEO)) {
         mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_Init failed\n");
@@ -858,7 +860,7 @@ static struct mp_image *get_screenshot(struct vo *vo)
 {
     struct priv *vc = vo->priv;
     mp_image_t *image = alloc_mpi(vc->ssmpi->width, vc->ssmpi->height,
-            vc->ssmpi->imgfmt);
+                                  vc->ssmpi->imgfmt);
     copy_mpi(image, vc->ssmpi);
     return image;
 }
@@ -868,7 +870,7 @@ static struct mp_image *get_window_screenshot(struct vo *vo)
     struct priv *vc = vo->priv;
     mp_image_t *image = alloc_mpi(vo->dwidth, vo->dheight, vc->osd_format.mpv);
     if (SDL_RenderReadPixels(vc->renderer, NULL, vc->osd_format.sdl,
-                image->planes[0], image->stride[0])) {
+                             image->planes[0], image->stride[0])) {
         mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_RenderReadPixels failed\n");
         free_mp_image(image);
         return NULL;
@@ -904,13 +906,13 @@ static int control(struct vo *vo, uint32_t request, void *data)
         force_resize(vo);
         return VO_TRUE;
     case VOCTRL_SCREENSHOT: {
-            struct voctrl_screenshot_args *args = data;
-            if (args->full_window)
-                args->out_image = get_window_screenshot(vo);
-            else
-                args->out_image = get_screenshot(vo);
-            return true;
-        }
+        struct voctrl_screenshot_args *args = data;
+        if (args->full_window)
+            args->out_image = get_window_screenshot(vo);
+        else
+            args->out_image = get_screenshot(vo);
+        return true;
+    }
     }
     return VO_NOTIMPL;
 }
