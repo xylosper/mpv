@@ -194,6 +194,7 @@ struct priv {
     } osd_surfaces[MAX_OSD_PARTS];
     unsigned int mouse_timer;
     int mouse_hidden;
+    int brightness, contrast;
 
     // options
     bool opt_fixtrans;
@@ -275,6 +276,7 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
         mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] Could not create a texture\n");
         return -1;
     }
+    SDL_SetTextureBlendMode(vc->tex, SDL_BLENDMODE_ADD);
 
     mp_image_t *texmpi = &vc->texmpi;
     texmpi->width = texmpi->w = width;
@@ -788,11 +790,39 @@ static int query_format(struct vo *vo, uint32_t format)
 static void draw_image(struct vo *vo, mp_image_t *mpi, double pts)
 {
     struct priv *vc = vo->priv;
-
     void *pixels;
     int pitch;
 
+    // decode brightness/contrast
+    int color_add = 0;
+    int color_mod = 255;
+    int brightness = vc->brightness;
+    int contrast = vc->contrast;
+
+    // only in this range it is possible to do brightness/contrast control
+    // properly, using just additive render operations and color modding
+    // (SDL2 provides no subtractive rendering, sorry)
+    if (2 * brightness < contrast) {
+        //brightness = (brightness + 2 * contrast) / 5; // closest point
+        brightness = (brightness + contrast) / 3; // equal adjustment
+        contrast = 2 * brightness;
+    }
+
+    // convert to values SDL2 likes
+    color_mod = ((contrast + 100) * 255 + 50) / 100;
+    color_add = ((2 * brightness - contrast) * 255 + 100) / 200;
+
+    // clamp
+    if (color_mod < 0)
+        color_mod = 0;
+    if (color_mod > 255)
+        color_mod = 255;
+    // color_add can't be < 0
+    if (color_add > 255)
+        color_add = 255;
+
     // typically this runs in parallel with the following copy_mpi call
+    SDL_SetRenderDrawColor(vc->renderer, color_add, color_add, color_add, 255);
     SDL_RenderClear(vc->renderer);
 
     if (mpi) {
@@ -837,7 +867,14 @@ static void draw_image(struct vo *vo, mp_image_t *mpi, double pts)
     dst.h = vc->dst_rect.y1 - vc->dst_rect.y0;
 
     // typically this runs in parallel with the following copy_mpi call
-    SDL_RenderCopy(vc->renderer, vc->tex, &src, &dst);
+    if (color_mod > 255) {
+        SDL_SetTextureColorMod(vc->tex, color_mod / 2, color_mod / 2, color_mod / 2);
+        SDL_RenderCopy(vc->renderer, vc->tex, &src, &dst);
+        SDL_RenderCopy(vc->renderer, vc->tex, &src, &dst);
+    } else {
+        SDL_SetTextureColorMod(vc->tex, color_mod, color_mod, color_mod);
+        SDL_RenderCopy(vc->renderer, vc->tex, &src, &dst);
+    }
     if (mpi)
         copy_mpi(vc->ssmpi, mpi);
 }
@@ -878,6 +915,36 @@ static struct mp_image *get_window_screenshot(struct vo *vo)
     return image;
 }
 
+static int set_eq(struct vo *vo, const char *name, int value)
+{
+    struct priv *vc = vo->priv;
+
+    if (!strcasecmp(name, "brightness"))
+        vc->brightness = value;
+    else if (!strcasecmp(name, "contrast"))
+        vc->contrast = value;
+    else
+        return VO_NOTIMPL;
+
+    vo->want_redraw = true;
+
+    return VO_TRUE;
+}
+
+static int get_eq(struct vo *vo, const char *name, int *value)
+{
+    struct priv *vc = vo->priv;
+
+    if (!strcasecmp(name, "brightness"))
+        *value = vc->brightness;
+    else if (!strcasecmp(name, "contrast"))
+        *value = vc->contrast;
+    else
+        return VO_NOTIMPL;
+
+    return VO_TRUE;
+}
+
 static int control(struct vo *vo, uint32_t request, void *data)
 {
     struct priv *vc = vo->priv;
@@ -905,6 +972,14 @@ static int control(struct vo *vo, uint32_t request, void *data)
     case VOCTRL_SET_PANSCAN:
         force_resize(vo);
         return VO_TRUE;
+    case VOCTRL_SET_EQUALIZER: {
+        struct voctrl_set_equalizer_args *args = data;
+        return set_eq(vo, args->name, args->value);
+    }
+    case VOCTRL_GET_EQUALIZER: {
+        struct voctrl_get_equalizer_args *args = data;
+        return get_eq(vo, args->name, args->valueptr);
+    }
     case VOCTRL_SCREENSHOT: {
         struct voctrl_screenshot_args *args = data;
         if (args->full_window)
