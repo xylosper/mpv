@@ -52,46 +52,46 @@
 struct formatmap_entry {
     Uint32 sdl;
     unsigned int mpv;
-    bool is_rgba;
+    int rgba_alpha_lsb;
 };
 const struct formatmap_entry formats[] = {
-    {SDL_PIXELFORMAT_YV12, IMGFMT_YV12, 0},
-    {SDL_PIXELFORMAT_IYUV, IMGFMT_IYUV, 0},
-    {SDL_PIXELFORMAT_YUY2, IMGFMT_YUY2, 0},
-    {SDL_PIXELFORMAT_UYVY, IMGFMT_UYVY, 0},
-    {SDL_PIXELFORMAT_YVYU, IMGFMT_YVYU, 0},
+    {SDL_PIXELFORMAT_YV12, IMGFMT_YV12, -1},
+    {SDL_PIXELFORMAT_IYUV, IMGFMT_IYUV, -1},
+    {SDL_PIXELFORMAT_YUY2, IMGFMT_YUY2, -1},
+    {SDL_PIXELFORMAT_UYVY, IMGFMT_UYVY, -1},
+    {SDL_PIXELFORMAT_YVYU, IMGFMT_YVYU, -1},
 #if BYTE_ORDER == BIG_ENDIAN
     {SDL_PIXELFORMAT_RGBX8888, IMGFMT_RGBA, 1},
     {SDL_PIXELFORMAT_BGRX8888, IMGFMT_BGRA, 1},
-    {SDL_PIXELFORMAT_ARGB8888, IMGFMT_ARGB, 1},
+    {SDL_PIXELFORMAT_ARGB8888, IMGFMT_ARGB, 0},
     {SDL_PIXELFORMAT_RGBA8888, IMGFMT_RGBA, 1},
-    {SDL_PIXELFORMAT_ABGR8888, IMGFMT_ABGR, 1},
+    {SDL_PIXELFORMAT_ABGR8888, IMGFMT_ABGR, 0},
     {SDL_PIXELFORMAT_BGRA8888, IMGFMT_BGRA, 1},
-    {SDL_PIXELFORMAT_RGB24, IMGFMT_RGB24, 0},
-    {SDL_PIXELFORMAT_BGR24, IMGFMT_BGR24, 0},
-    {SDL_PIXELFORMAT_RGB888, IMGFMT_RGB24, 0},
-    {SDL_PIXELFORMAT_BGR888, IMGFMT_BGR24, 0},
-    {SDL_PIXELFORMAT_RGB565, IMGFMT_RGB16, 0},
-    {SDL_PIXELFORMAT_BGR565, IMGFMT_BGR16, 0},
-    {SDL_PIXELFORMAT_RGB555, IMGFMT_RGB15, 0},
-    {SDL_PIXELFORMAT_BGR555, IMGFMT_BGR15, 0},
-    {SDL_PIXELFORMAT_RGB444, IMGFMT_RGB12, 0}
+    {SDL_PIXELFORMAT_RGB24, IMGFMT_RGB24, -1},
+    {SDL_PIXELFORMAT_BGR24, IMGFMT_BGR24, -1},
+    {SDL_PIXELFORMAT_RGB888, IMGFMT_RGB24, -1},
+    {SDL_PIXELFORMAT_BGR888, IMGFMT_BGR24, -1},
+    {SDL_PIXELFORMAT_RGB565, IMGFMT_RGB16, -1},
+    {SDL_PIXELFORMAT_BGR565, IMGFMT_BGR16, -1},
+    {SDL_PIXELFORMAT_RGB555, IMGFMT_RGB15, -1},
+    {SDL_PIXELFORMAT_BGR555, IMGFMT_BGR15, -1},
+    {SDL_PIXELFORMAT_RGB444, IMGFMT_RGB12, -1}
 #else
     {SDL_PIXELFORMAT_RGBX8888, IMGFMT_ABGR, 1},
     {SDL_PIXELFORMAT_BGRX8888, IMGFMT_ARGB, 1},
-    {SDL_PIXELFORMAT_ARGB8888, IMGFMT_BGRA, 1},
+    {SDL_PIXELFORMAT_ARGB8888, IMGFMT_BGRA, 0},
     {SDL_PIXELFORMAT_RGBA8888, IMGFMT_ABGR, 1},
-    {SDL_PIXELFORMAT_ABGR8888, IMGFMT_RGBA, 1},
+    {SDL_PIXELFORMAT_ABGR8888, IMGFMT_RGBA, 0},
     {SDL_PIXELFORMAT_BGRA8888, IMGFMT_ARGB, 1},
-    {SDL_PIXELFORMAT_RGB24, IMGFMT_RGB24, 0},
-    {SDL_PIXELFORMAT_BGR24, IMGFMT_BGR24, 0},
-    {SDL_PIXELFORMAT_RGB888, IMGFMT_BGR24, 0},
-    {SDL_PIXELFORMAT_BGR888, IMGFMT_RGB24, 0},
-    {SDL_PIXELFORMAT_RGB565, IMGFMT_BGR16, 0},
-    {SDL_PIXELFORMAT_BGR565, IMGFMT_RGB16, 0},
-    {SDL_PIXELFORMAT_RGB555, IMGFMT_BGR15, 0},
-    {SDL_PIXELFORMAT_BGR555, IMGFMT_RGB15, 0},
-    {SDL_PIXELFORMAT_RGB444, IMGFMT_BGR12, 0}
+    {SDL_PIXELFORMAT_RGB24, IMGFMT_RGB24, -1},
+    {SDL_PIXELFORMAT_BGR24, IMGFMT_BGR24, -1},
+    {SDL_PIXELFORMAT_RGB888, IMGFMT_BGR24, -1},
+    {SDL_PIXELFORMAT_BGR888, IMGFMT_RGB24, -1},
+    {SDL_PIXELFORMAT_RGB565, IMGFMT_BGR16, -1},
+    {SDL_PIXELFORMAT_BGR565, IMGFMT_RGB16, -1},
+    {SDL_PIXELFORMAT_RGB555, IMGFMT_BGR15, -1},
+    {SDL_PIXELFORMAT_BGR555, IMGFMT_RGB15, -1},
+    {SDL_PIXELFORMAT_RGB444, IMGFMT_BGR12, -1}
 #endif
 };
 
@@ -452,9 +452,10 @@ static struct bitmap_packer *make_packer(struct vo *vo)
     return packer;
 }
 
-static void unpremultiply_BGR32(struct vo *vo, unsigned char *out, int ostride,
-                                const unsigned char *in, int istride,
-                                int w, int h)
+static void unpremultiply_BGR32_alpha_msb(struct vo *vo,
+                                          unsigned char *out, int ostride,
+                                          const unsigned char *in, int istride,
+                                          int w, int h)
 {
     struct priv *vc = vo->priv;
 
@@ -512,6 +513,72 @@ static void unpremultiply_BGR32(struct vo *vo, unsigned char *out, int ostride,
                 gval = FFMIN(255, (gval * 255 + add) / div);
                 bval = FFMIN(255, (bval * 255 + add) / div);
                 orow[x] = bval + (gval << 8) + (rval << 16) + (aval << 24);
+            }
+        }
+    }
+}
+
+static void unpremultiply_BGR32_alpha_lsb(struct vo *vo,
+                                          unsigned char *out, int ostride,
+                                          const unsigned char *in, int istride,
+                                          int w, int h)
+{
+    struct priv *vc = vo->priv;
+
+    for (int y = 0; y < h; ++y) {
+        uint32_t *irow = (uint32_t *) &in[istride * y];
+        uint32_t *orow = (uint32_t *) &out[ostride * y];
+        for (int x = 0; x < w; ++x) {
+            uint32_t pval = irow[x];
+            uint8_t aval = (pval & 0xFF);
+            if (aval == 0) {
+                if (vc->opt_fixtrans) {
+                    // find neighbor with highest alpha
+                    int ymin = FFMAX(y - 1, 0);
+                    int ymax = FFMIN(y + 1, h - 1);
+                    int xmin = FFMAX(x - 1, 0);
+                    int xmax = FFMIN(x + 1, w - 1);
+                    uint32_t bestpval = 0;
+                    uint8_t bestaval = 0;
+                    for (int yn = ymin; yn <= ymax; ++yn) {
+                        uint32_t *inrow = (uint32_t *) &in[istride * yn];
+                        for (int xn = xmin; xn <= xmax; ++xn) {
+                            uint32_t pnval = inrow[xn];
+                            uint8_t anval = (pnval & 0xFF);
+                            if (anval > bestaval) {
+                                bestaval = anval;
+                                bestpval = pnval;
+                            }
+                        }
+                    }
+                    // use its color, but with zero alpha
+                    if (bestaval) {
+                        uint8_t rval = (bestpval >> 8) & 0xFF;
+                        uint8_t gval = (bestpval >> 16) & 0xFF;
+                        uint8_t bval = (bestpval >> 24) & 0xFF;
+                        int div = bestaval;
+                        int add = div / 2;
+                        rval = FFMIN(255, (rval * 255 + add) / div);
+                        gval = FFMIN(255, (gval * 255 + add) / div);
+                        bval = FFMIN(255, (bval * 255 + add) / div);
+                        orow[x] = (bval << 24) + (gval << 16) + (rval << 8);
+                    } else {
+                        // all neighbors are zero, so it's ok to make this one
+                        // zero too
+                        orow[x] = 0;
+                    }
+                } else
+                    orow[x] = 0;
+            } else {
+                uint8_t rval = (pval >> 8) & 0xFF;
+                uint8_t gval = (pval >> 16) & 0xFF;
+                uint8_t bval = (pval >> 24) & 0xFF;
+                int div = aval;
+                int add = div / 2;
+                rval = FFMIN(255, (rval * 255 + add) / div);
+                gval = FFMIN(255, (gval * 255 + add) / div);
+                bval = FFMIN(255, (bval * 255 + add) / div);
+                orow[x] = (bval << 24) + (gval << 16) + (rval << 8) + aval;
             }
         }
     }
@@ -656,10 +723,17 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
     }
 
     if (surfpixels != writepixels) {
-        unpremultiply_BGR32(vo,
-                            surfpixels, surfpitch,
-                            writepixels, surfpitch,
-                            sfc->packer->w, sfc->packer->h);
+        if (vc->osd_format.rgba_alpha_lsb) {
+            unpremultiply_BGR32_alpha_lsb(vo,
+                                          surfpixels, surfpitch,
+                                          writepixels, surfpitch,
+                                          sfc->packer->w, sfc->packer->h);
+        } else {
+            unpremultiply_BGR32_alpha_msb(vo,
+                                          surfpixels, surfpitch,
+                                          writepixels, surfpitch,
+                                          sfc->packer->w, sfc->packer->h);
+        }
         talloc_free(writepixels);
     }
 
@@ -719,8 +793,9 @@ static bool MP_SDL_IsGoodRenderer(int n, const char *driver_name_wanted)
     int i, j;
     for (i = 0; i < ri.num_texture_formats; ++i)
         for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
-            if (ri.texture_formats[i] == formats[j].sdl && formats[j].is_rgba)
-                return true;
+            if (ri.texture_formats[i] == formats[j].sdl)
+                if (formats[j].rgba_alpha_lsb >= 0)
+                    return true;
     return false;
 }
 
@@ -802,7 +877,7 @@ static int preinit(struct vo *vo, const char *arg)
     for (i = 0; i < vc->renderer_info.num_texture_formats; ++i)
         for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
             if (vc->renderer_info.texture_formats[i] == formats[j].sdl)
-                if (formats[j].is_rgba)
+                if (formats[j].rgba_alpha_lsb >= 0)
                     vc->osd_format = formats[j];
 
     // we don't have proper event handling
