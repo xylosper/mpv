@@ -646,7 +646,7 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
                 // no conversion needed here yet
                 SDL_ConvertPixels(
                     b->w, b->h, SDL_PIXELFORMAT_ARGB8888,
-                        b->bitmap, b->stride * 4,
+                        b->bitmap, b->stride,
                     vc->osd_format.sdl,
                         writepixels + x * 4 + y * surfpitch, surfpitch);
             }
