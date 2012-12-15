@@ -532,11 +532,19 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
 
     unsigned char *surfpixels = NULL;
     int surfpitch = 0;
+    unsigned char *writepixels = NULL;
+    // writepixels = what we write OSD bitmaps to
+    // surfpixels = the surface's pixels
+    // normally these two are equal; if they are not, we need to fix
+    // premultiplied alpha
 
     if (imgs->bitmap_id != sfc->bitmap_id) {
         if (!sfc->packer)
             sfc->packer = make_packer(vo);
-        sfc->packer->padding = 0;
+        sfc->packer->padding =
+            imgs->format == SUBBITMAP_RGBA ? 2 : // for unpremultiplying alpha
+            imgs->scaled ? 1 : // for bilinear filtering
+            0;
         int r = packer_pack_from_subbitmaps(sfc->packer, imgs);
         if (r < 0) {
             mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] OSD bitmaps do not fit on "
@@ -566,6 +574,28 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
             return;
         }
 
+        // possibly allocate a temporary buffer for unpremultiplying
+        size_t sz = surfpitch * (sfc->packer->h - 1) + 4 * sfc->packer->w;
+        if (imgs->format == SUBBITMAP_RGBA) {
+            // note: only in this case is writepixels != surfpixels!
+            writepixels = talloc_size(vc, sz);
+        } else
+            writepixels = surfpixels;
+
+        // zero surface if we need padding
+        if (sfc->packer->padding) {
+            if (imgs->format == SUBBITMAP_LIBASS) {
+                for (int i = 0; i < sfc->packer->h; ++i) {
+                    uint32_t *row = (uint32_t *) (writepixels + surfpitch * i);
+                    for (int j = 0; j < sfc->packer->w; ++j)
+                        row[j] = 0x00FFFFFF;
+                        // we need to fill this type with 0x00FFFFFF!
+                        // to prevent bilinear filtering issues
+                }
+            } else
+                memset(writepixels, 0, sz);
+        }
+
         if (sfc->packer->count > sfc->targets_size) {
             talloc_free(sfc->targets);
             sfc->targets_size = sfc->packer->count;
@@ -591,7 +621,7 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
             target->color[1] = ((b->libass.color >> 16) & 0xff);
             target->color[2] = ((b->libass.color >>  8) & 0xff);
             target->alpha = 255 - ((b->libass.color >> 0) & 0xff);
-            if (surfpixels) {
+            if (writepixels) {
                 // damn SDL has no support for 8bit gray...
                 // idea: could instead hand craft a SDL_Surface with palette
                 size_t n = (b->h - 1) * b->stride + b->w, i;
@@ -603,7 +633,7 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
                     b->w, b->h, SDL_PIXELFORMAT_ARGB8888,
                         bmp, b->stride * 4,
                     vc->osd_format.sdl,
-                        surfpixels + x * 4 + y * surfpitch, surfpitch);
+                        writepixels + x * 4 + y * surfpitch, surfpitch);
                 talloc_free(bmp);
             }
             break;
@@ -612,22 +642,25 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
             target->color[1] = 255;
             target->color[2] = 255;
             target->alpha = 255;
-            if (surfpixels) {
-                // need to un-premultiply alpha (I know this will scale wrong,
-                // but we really can't afford calling libswscale here)
-                uint8_t *bmp = talloc_size(vc, b->w * b->h * 4);
-                unpremultiply_BGR32(vo, bmp, b->w * 4,
-                                    b->bitmap, b->stride, b->w, b->h);
+            if (writepixels) {
+                // no conversion needed here yet
                 SDL_ConvertPixels(
                     b->w, b->h, SDL_PIXELFORMAT_ARGB8888,
-                        bmp, b->w * 4,
+                        b->bitmap, b->stride * 4,
                     vc->osd_format.sdl,
-                        surfpixels + x * 4 + y * surfpitch, surfpitch);
-                talloc_free(bmp);
+                        writepixels + x * 4 + y * surfpitch, surfpitch);
             }
             break;
         }
         sfc->render_count++;
+    }
+
+    if (surfpixels != writepixels) {
+        unpremultiply_BGR32(vo,
+                            surfpixels, surfpitch,
+                            writepixels, surfpitch,
+                            sfc->packer->w, sfc->packer->h);
+        talloc_free(writepixels);
     }
 
     if (surfpixels)
