@@ -276,7 +276,6 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
         mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] Could not create a texture\n");
         return -1;
     }
-    SDL_SetTextureBlendMode(vc->tex, SDL_BLENDMODE_ADD);
 
     mp_image_t *texmpi = &vc->texmpi;
     texmpi->width = texmpi->w = width;
@@ -940,6 +939,13 @@ static void draw_image(struct vo *vo, mp_image_t *mpi, double pts)
     // typically this runs in parallel with the following copy_mpi call
     SDL_SetRenderDrawColor(vc->renderer, color_add, color_add, color_add, 255);
     SDL_RenderClear(vc->renderer);
+
+    // use additive blending for the video texture only if the clear color is
+    // not black (faster especially for the software renderer)
+    if (color_add)
+        SDL_SetTextureBlendMode(vc->tex, SDL_BLENDMODE_ADD);
+    else
+        SDL_SetTextureBlendMode(vc->tex, SDL_BLENDMODE_NONE);
 
     if (mpi) {
         if (SDL_LockTexture(vc->tex, NULL, &pixels, &pitch)) {
