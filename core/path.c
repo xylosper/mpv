@@ -23,6 +23,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,113 +34,94 @@
 #include "config.h"
 #include "core/mp_msg.h"
 #include "core/path.h"
+#include "talloc.h"
+#include "osdep/io.h"
 
-#ifdef CONFIG_MACOSX_BUNDLE
-#include <CoreFoundation/CoreFoundation.h>
-#include <unistd.h>
-#elif defined(__MINGW32__)
+#if defined(__MINGW32__)
 #include <windows.h>
 #elif defined(__CYGWIN__)
 #include <windows.h>
 #include <sys/cygwin.h>
 #endif
 
-#include "talloc.h"
+#ifdef CONFIG_MACOSX_BUNDLE
+#include "osdep/macosx_bundle.h"
+#endif
 
-#include "osdep/io.h"
 
-char *get_path(const char *filename){
-	char *homedir;
-	char *buff;
+typedef char *(*lookup_fun)(const char *);
+static const lookup_fun config_lookup_functions[] = {
+    mp_find_user_config_file,
+#ifdef CONFIG_MACOSX_BUNDLE
+    get_bundled_path,
+#endif
+    mp_find_global_config_file,
+    NULL
+};
+
+char *mp_find_config_file(const char *filename)
+{
+    for (int i = 0; config_lookup_functions[i] != NULL; i++) {
+        char *path = config_lookup_functions[i](filename);
+        if (!path) continue;
+
+        if (mp_path_exists(path))
+            return path;
+
+        talloc_free(path);
+    }
+    return NULL;
+}
+
+char *mp_find_user_config_file(const char *filename)
+{
+    char *homedir = NULL, *buff = NULL;
 #ifdef __MINGW32__
-	static char *config_dir = "/mpv";
+    static char *config_dir = "mpv";
 #else
-	static char *config_dir = "/.mpv";
+    static char *config_dir = ".mpv";
 #endif
 #if defined(__MINGW32__) || defined(__CYGWIN__)
-	char exedir[260];
+    char exedir[260];
 #endif
-	int len;
-#ifdef CONFIG_MACOSX_BUNDLE
-	struct stat dummy;
-	CFIndex maxlen=256;
-	CFURLRef res_url_ref=NULL;
-	CFURLRef bdl_url_ref=NULL;
-	char *res_url_path = NULL;
-	char *bdl_url_path = NULL;
-#endif
-
-	if ((homedir = getenv("MPV_HOME")) != NULL)
-		config_dir = "";
-	else if ((homedir = getenv("HOME")) == NULL)
+    if ((homedir = getenv("MPV_HOME")) != NULL) {
+        config_dir = "";
+    } else if ((homedir = getenv("HOME")) == NULL) {
 #if defined(__MINGW32__) || defined(__CYGWIN__)
-	/* Hack to get fonts etc. loaded outside of Cygwin environment. */
-	{
-		int i,imax=0;
-		len = (int)GetModuleFileNameA(NULL, exedir, 260);
-		for (i=0; i < len; i++)
-			if (exedir[i] =='\\')
-				{exedir[i]='/'; imax=i;}
-		exedir[imax]='\0';
-		homedir = exedir;
-	}
+    /* Hack to get fonts etc. loaded outside of Cygwin environment. */
+        int i, imax = 0;
+        int len = (int)GetModuleFileNameA(NULL, exedir, 260);
+        for (i = 0; i < len; i++)
+            if (exedir[i] == '\\') {
+                exedir[i] = '/';
+                imax = i;
+            }
+        exedir[imax] = '\0';
+        homedir = exedir;
 #else
-	return NULL;
+        return NULL;
 #endif
-	len = strlen(homedir) + strlen(config_dir) + 1;
-	if (filename == NULL) {
-		if ((buff = malloc(len)) == NULL)
-			return NULL;
-		sprintf(buff, "%s%s", homedir, config_dir);
-	} else {
-		len += strlen(filename) + 1;
-		if ((buff = malloc(len)) == NULL)
-			return NULL;
-		sprintf(buff, "%s%s/%s", homedir, config_dir, filename);
-	}
+    }
 
-#ifdef CONFIG_MACOSX_BUNDLE
-	if (stat(buff, &dummy)) {
+    if (filename) {
+        char * temp = mp_path_join(NULL, bstr0(homedir), bstr0(config_dir));
+        buff = mp_path_join(NULL, bstr0(temp), bstr0(filename));
+        talloc_free(temp);
+    } else {
+        buff = mp_path_join(NULL, bstr0(homedir), bstr0(config_dir));
+    }
 
-		res_url_ref=CFBundleCopyResourcesDirectoryURL(CFBundleGetMainBundle());
-		bdl_url_ref=CFBundleCopyBundleURL(CFBundleGetMainBundle());
+    mp_msg(MSGT_GLOBAL, MSGL_V, "get_path('%s') -> '%s'\n", filename, buff);
+    return buff;
+}
 
-		if (res_url_ref&&bdl_url_ref) {
-
-			res_url_path=malloc(maxlen);
-			bdl_url_path=malloc(maxlen);
-
-			while (!CFURLGetFileSystemRepresentation(res_url_ref, true, res_url_path, maxlen)) {
-				maxlen*=2;
-				res_url_path=realloc(res_url_path, maxlen);
-			}
-			CFRelease(res_url_ref);
-
-			while (!CFURLGetFileSystemRepresentation(bdl_url_ref, true, bdl_url_path, maxlen)) {
-				maxlen*=2;
-				bdl_url_path=realloc(bdl_url_path, maxlen);
-			}
-			CFRelease(bdl_url_ref);
-
-			if (strcmp(res_url_path, bdl_url_path) == 0)
-				res_url_path = NULL;
-		}
-
-		if (res_url_path&&filename) {
-			if ((strlen(filename)+strlen(res_url_path)+2)>maxlen) {
-				maxlen=strlen(filename)+strlen(res_url_path)+2;
-			}
-			free(buff);
-			buff = malloc(maxlen);
-			strcpy(buff, res_url_path);
-
-			strcat(buff,"/");
-			strcat(buff, filename);
-		}
-	}
-#endif
-	mp_msg(MSGT_GLOBAL,MSGL_V,"get_path('%s') -> '%s'\n",filename,buff);
-	return buff;
+char *mp_find_global_config_file(const char *filename)
+{
+    if (filename) {
+        return mp_path_join(NULL, bstr0(MPLAYER_CONFDIR), bstr0(filename));
+    } else {
+        return talloc_strdup(NULL, MPLAYER_CONFDIR);
+    }
 }
 
 char *mp_basename(const char *path)
@@ -160,7 +142,9 @@ char *mp_basename(const char *path)
 
 struct bstr mp_dirname(const char *path)
 {
-    struct bstr ret = {(uint8_t *)path, mp_basename(path) - path};
+    struct bstr ret = {
+        (uint8_t *)path, mp_basename(path) - path
+    };
     if (ret.len == 0)
         return bstr0(".");
     return ret;
@@ -185,7 +169,7 @@ char *mp_path_join(void *talloc_ctx, struct bstr p1, struct bstr p2)
     int endchar1 = p1.start[p1.len - 1];
 #if HAVE_DOS_PATHS
     have_separator = endchar1 == '/' || endchar1 == '\\'
-        || p1.len == 2 && endchar1 == ':';     // "X:" only
+                     || p1.len == 2 && endchar1 == ':'; // "X:" only
 #else
     have_separator = endchar1 == '/';
 #endif
