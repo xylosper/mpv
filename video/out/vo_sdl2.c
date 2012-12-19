@@ -167,6 +167,7 @@ const struct keymap_entry keys[] = {
 };
 
 struct priv {
+    bool reinit_renderer;
     SDL_Window *window;
     SDL_Renderer *renderer;
     SDL_RendererInfo renderer_info;
@@ -199,6 +200,110 @@ struct priv {
     // options
     bool opt_fixtrans;
 };
+
+static bool is_good_renderer(int n, const char *driver_name_wanted)
+{
+    SDL_RendererInfo ri;
+    if (SDL_GetRenderDriverInfo(n, &ri))
+        return false;
+
+    if (driver_name_wanted && driver_name_wanted[0])
+        if (strcmp(driver_name_wanted, ri.name))
+            return false;
+
+    int i, j;
+    for (i = 0; i < ri.num_texture_formats; ++i)
+        for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
+            if (ri.texture_formats[i] == formats[j].sdl)
+                if (formats[j].rgba_alpha_lsb >= 0)
+                    return true;
+
+    return false;
+}
+
+static void destroy_renderer(struct vo *vo)
+{
+    struct priv *vc = vo->priv;
+
+    // free ALL the textures
+    if (vc->tex) {
+        SDL_DestroyTexture(vc->tex);
+        vc->tex = NULL;
+    }
+
+    int i;
+    for (i = 0; i < MAX_OSD_PARTS; ++i) {
+        if (vc->osd_surfaces[i].tex) {
+            SDL_DestroyTexture(vc->osd_surfaces[i].tex);
+            vc->osd_surfaces[i].tex = NULL;
+        }
+    }
+
+    if (vc->renderer) {
+        SDL_DestroyRenderer(vc->renderer);
+        vc->renderer = NULL;
+    }
+
+    if (vc->window) {
+        SDL_DestroyWindow(vc->window);
+        vc->window = NULL;
+    }
+}
+
+static int init_renderer(struct vo *vo, int w, int h)
+{
+    struct priv *vc = vo->priv;
+
+    vc->window = SDL_CreateWindow("MPV",
+                                  SDL_WINDOWPOS_UNDEFINED,
+                                  SDL_WINDOWPOS_UNDEFINED,
+                                  w, h,
+                                  SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN);
+    if (!vc->window) {
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_CreateWindow failedd\n");
+        destroy_renderer(vo);
+        return -1;
+    }
+
+    int n = SDL_GetNumRenderDrivers();
+    int i;
+    for (i = 0; i < n; ++i)
+        if (is_good_renderer(i, SDL_GetHint(SDL_HINT_RENDER_DRIVER)))
+            break;
+    if (i >= n)
+        for (i = 0; i < n; ++i)
+            if (is_good_renderer(i, NULL))
+                break;
+    if (i >= n) {
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] No supported renderer\n");
+        destroy_renderer(vo);
+        return -1;
+    }
+
+    vc->renderer = SDL_CreateRenderer(vc->window, i, 0);
+    if (!vc->renderer) {
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_CreateRenderer failed\n");
+        destroy_renderer(vo);
+        return -1;
+    }
+
+    if (SDL_GetRendererInfo(vc->renderer, &vc->renderer_info)) {
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_GetRendererInfo failed\n");
+        destroy_renderer(vo);
+        return -1;
+    }
+
+    mp_msg(MSGT_VO, MSGL_INFO, "[sdl2] Using %s\n", vc->renderer_info.name);
+
+    int j;
+    for (i = 0; i < vc->renderer_info.num_texture_formats; ++i)
+        for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
+            if (vc->renderer_info.texture_formats[i] == formats[j].sdl)
+                if (formats[j].rgba_alpha_lsb >= 0)
+                    vc->osd_format = formats[j];
+
+    return 0;
+}
 
 static void resize(struct vo *vo, int w, int h)
 {
@@ -255,7 +360,19 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
                   uint32_t format)
 {
     struct priv *vc = vo->priv;
-    SDL_SetWindowSize(vc->window, d_width, d_height);
+
+    if (vc->reinit_renderer) {
+        destroy_renderer(vo);
+        vc->reinit_renderer = false;
+    }
+
+    if (vc->window)
+        SDL_SetWindowSize(vc->window, d_width, d_height);
+    else {
+        if (init_renderer(vo, d_width, d_height) != 0)
+            return -1;
+    }
+
     if (vc->tex)
         SDL_DestroyTexture(vc->tex);
     Uint32 texfmt = SDL_PIXELFORMAT_UNKNOWN;
@@ -434,6 +551,7 @@ static void check_events(struct vo *vo)
 static void uninit(struct vo *vo)
 {
     struct priv *vc = vo->priv;
+    destroy_renderer(vo);
     free_mp_image(vc->ssmpi);
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
     talloc_free(vc);
@@ -588,13 +706,13 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
     struct priv *vc = vo->priv;
     struct osd_bitmap_surface *sfc = &vc->osd_surfaces[imgs->render_index];
 
-    if (imgs->bitmap_pos_id == sfc->bitmap_pos_id)
+    if (imgs->format == SUBBITMAP_EMPTY || imgs->num_parts == 0)
+        return;
+
+    if (imgs->bitmap_pos_id == sfc->bitmap_pos_id && sfc->tex)
         return;  // Nothing changed and we still have the old data
 
     sfc->render_count = 0;
-
-    if (imgs->format == SUBBITMAP_EMPTY || imgs->num_parts == 0)
-        return;
 
     unsigned char *surfpixels = NULL;
     int surfpitch = 0;
@@ -604,7 +722,7 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
     // normally these two are equal; if they are not, we need to fix
     // premultiplied alpha
 
-    if (imgs->bitmap_id != sfc->bitmap_id) {
+    if (imgs->bitmap_id != sfc->bitmap_id || !sfc->tex) {
         if (!sfc->packer)
             sfc->packer = make_packer(vo);
         sfc->packer->padding =
@@ -779,30 +897,9 @@ static void draw_osd(struct vo *vo, struct osd_state *osd)
     osd_draw(osd, vc->osd_res, osd->vo_pts, 0, formats, draw_osd_cb, vo);
 }
 
-static bool MP_SDL_IsGoodRenderer(int n, const char *driver_name_wanted)
-{
-    SDL_RendererInfo ri;
-    if (SDL_GetRenderDriverInfo(n, &ri))
-        return false;
-
-    if (driver_name_wanted && driver_name_wanted[0])
-        if (strcmp(driver_name_wanted, ri.name))
-            return false;
-
-    int i, j;
-    for (i = 0; i < ri.num_texture_formats; ++i)
-        for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
-            if (ri.texture_formats[i] == formats[j].sdl)
-                if (formats[j].rgba_alpha_lsb >= 0)
-                    return true;
-    return false;
-}
-
 static int preinit(struct vo *vo, const char *arg)
 {
     struct priv *vc = vo->priv;
-
-    int i, j;
 
     if (SDL_WasInit(SDL_INIT_VIDEO)) {
         mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] already initialized\n");
@@ -831,53 +928,13 @@ static int preinit(struct vo *vo, const char *arg)
         return -1;
     }
 
-    vc->window = SDL_CreateWindow("MPV",
-                                  SDL_WINDOWPOS_UNDEFINED,
-                                  SDL_WINDOWPOS_UNDEFINED,
-                                  640, 480,
-                                  SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN);
-    if (!vc->window) {
-        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_CreateWindow failedd\n");
+    // try creating a renderer (this also gets the renderer_info data
+    // for query_format to use!)
+    if (init_renderer(vo, 640, 480) != 0)
         return -1;
-    }
 
-    int n = SDL_GetNumRenderDrivers();
-    for (i = 0; i < n; ++i)
-        if (MP_SDL_IsGoodRenderer(i, SDL_GetHint(SDL_HINT_RENDER_DRIVER)))
-            break;
-    if (i >= n)
-        for (i = 0; i < n; ++i)
-            if (MP_SDL_IsGoodRenderer(i, NULL))
-                break;
-    if (i >= n) {
-        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] No supported renderer\n");
-        SDL_DestroyWindow(vc->window);
-        vc->window = NULL;
-        return -1;
-    }
-
-    vc->renderer = SDL_CreateRenderer(vc->window, i, 0);
-    if (!vc->renderer) {
-        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_CreateRenderer failed\n");
-        SDL_DestroyWindow(vc->window);
-        vc->window = NULL;
-        return -1;
-    }
-
-    if (SDL_GetRendererInfo(vc->renderer, &vc->renderer_info)) {
-        mp_msg(MSGT_VO, MSGL_ERR, "[sdl2] SDL_GetRendererInfo failed\n");
-        SDL_DestroyWindow(vc->window);
-        vc->window = NULL;
-        return 0;
-    }
-
-    mp_msg(MSGT_VO, MSGL_INFO, "[sdl2] Using %s\n", vc->renderer_info.name);
-
-    for (i = 0; i < vc->renderer_info.num_texture_formats; ++i)
-        for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
-            if (vc->renderer_info.texture_formats[i] == formats[j].sdl)
-                if (formats[j].rgba_alpha_lsb >= 0)
-                    vc->osd_format = formats[j];
+    // please reinitialize the renderer to proper size on config()
+    vc->reinit_renderer = true;
 
     // we don't have proper event handling
     vo->wakeup_period = 0.02;
