@@ -351,6 +351,9 @@ static void set_fullscreen(struct vo *vo, int fs)
         return;
     }
 
+    // toggling fullscreen might recreate the window, so better guard for this
+    SDL_DisableScreenSaver();
+
     vo_fs = fs;
     force_resize(vo);
 }
@@ -412,6 +415,8 @@ static int config(struct vo *vo, uint32_t width, uint32_t height,
     vc->ssmpi = alloc_mpi(width, height, format);
 
     resize(vo, d_width, d_height);
+
+    SDL_DisableScreenSaver();
 
     if (flags & VOFLAG_FULLSCREEN)
         set_fullscreen(vo, 1);
