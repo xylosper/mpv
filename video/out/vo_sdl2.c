@@ -470,10 +470,10 @@ static void check_events(struct vo *vo)
             case SDL_WINDOWEVENT_SIZE_CHANGED:
                 check_resize(vo);
                 break;
-            case SDL_WINDOWEVENT_CLOSE:
-                mplayer_put_key(vo->key_fifo, KEY_CLOSE_WIN);
-                break;
             }
+            break;
+        case SDL_QUIT:
+            mplayer_put_key(vo->key_fifo, KEY_CLOSE_WIN);
             break;
         case SDL_TEXTINPUT: {
             int sdl_mod = SDL_GetModState();
