@@ -43,6 +43,7 @@ struct priv
 
 static void audio_callback(void *userdata, Uint8 *stream, int len)
 {
+    mp_msg(MSGT_AO, MSGL_INFO, "cb\n");
     struct ao *ao = userdata;
     struct priv *priv = ao->priv;
 
@@ -53,7 +54,7 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
         if (got < 0)
             break;
         if (got == 0)
-            SDL_Sleep(10); // FIXME hack
+            SDL_Delay(10); // FIXME hack
         len -= got;
         stream += len;
     }
@@ -66,7 +67,10 @@ static void uninit(struct ao *ao, bool cut_audio)
         return;
 
     // close audio device
-    SDL_QuitSubSystem(SDL_INIT_AUDIO);
+    SDL_QuitSubSystem(SDL_INIT_AUDIO | SDL_INIT_TIMER);
+
+    if (priv->buffer)
+        av_fifo_free(priv->buffer);
 
     talloc_free(ao->priv);
     ao->priv = NULL;
@@ -74,10 +78,10 @@ static void uninit(struct ao *ao, bool cut_audio)
 
 static int init(struct ao *ao, char *params)
 {
-    struct priv *priv = talloc_zero_size(ao, sizeof(priv));
+    struct priv *priv = talloc_zero(ao, struct priv);
     ao->priv = priv;
 
-    SDL_InitSubSystem(SDL_INIT_AUDIO);
+    SDL_InitSubSystem(SDL_INIT_AUDIO | SDL_INIT_TIMER);
 
     SDL_AudioSpec desired, obtained;
 
@@ -100,7 +104,7 @@ static int init(struct ao *ao, char *params)
     desired.callback = audio_callback;
     desired.userdata = ao;
 
-    buffer = av_fifo_alloc(BUFFSIZE);
+    priv->buffer = av_fifo_alloc(BUFFSIZE);
 
     SDL_OpenAudio(&desired, &obtained);
 
@@ -150,6 +154,7 @@ static int get_space(struct ao *ao)
 
 static int play(struct ao *ao, void *data, int len, int flags)
 {
+    mp_msg(MSGT_AO, MSGL_INFO, "play\n");
     struct priv *priv = ao->priv;
     //LOCK
     int free = av_fifo_space(priv->buffer);
@@ -160,6 +165,7 @@ static int play(struct ao *ao, void *data, int len, int flags)
         priv->unpause = 0;
         SDL_PauseAudio(SDL_FALSE);
     }
+    mp_msg(MSGT_AO, MSGL_INFO, "play -> %d\n", ret);
     return ret;
 }
 
