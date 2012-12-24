@@ -2330,9 +2330,11 @@ fi
 if test "$_sdl2" = yes ; then
   def_sdl2='#define CONFIG_SDL2 1'
   vomodules="sdl2 $vomodules"
+  aomodules="sdl2 $aomodules"
 else
   def_sdl2='#undef CONFIG_SDL2'
-  novomodules="sdl2 $novomodules"
+  novomodules="sdl2 $noaomodules"
+  noaomodules="sdl2 $noaomodules"
 fi
 echores "$_sdl2"
 
