@@ -31,6 +31,7 @@
 struct priv
 {
     AVFifoBuffer *buffer;
+    bool unpause;
 };
 
 static void audio_callback(void *userdata, Uint8 *stream, int len)
@@ -62,7 +63,7 @@ static int init(struct ao *ao, char *params)
     // move back obtained data
     // open audio device via SDL_OpenAudio
 
-    SDL_PauseAudio(0);
+    priv->unpause = 1;
 
     return 1;
 }
@@ -97,7 +98,12 @@ static int play(struct ao *ao, void *data, int len, int flags)
     struct priv *priv = ao->priv;
     int free = av_fifo_space(priv->buffer);
     if (len > free) len = free;
-    return av_fifo_generic_write(priv->buffer, data, len, NULL);
+    int ret = av_fifo_generic_write(priv->buffer, data, len, NULL);
+    if (priv->unpause) {
+        priv->unpause = 0;
+        SDL_PauseAudio(SDL_FALSE);
+    }
+    return ret;
 }
 
 static float get_delay(struct ao *ao)
