@@ -28,6 +28,13 @@
 
 #include <SDL.h>
 
+//! size of one chunk, if this is too small MPlayer will start to "stutter"
+//! after a short time of playback
+#define CHUNK_SIZE (16 * 1024)
+//! number of "virtual" chunks the buffer consists of
+#define NUM_CHUNKS 8
+#define BUFFSIZE (NUM_CHUNKS * CHUNK_SIZE)
+
 struct priv
 {
     AVFifoBuffer *buffer;
@@ -38,8 +45,17 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 {
     struct ao *ao = userdata;
     struct priv *priv = ao->priv;
-    // get len bytes for buffer
-    // block if needed!
+
+    while (len)
+    {
+        int got = av_fifo_generic_read(priv->buffer, stream, len, NULL);
+        if (got < 0)
+            break;
+        if (got == 0)
+            BLOCK;
+        len -= got;
+        stream += len;
+    }
 }
 
 static void uninit(struct ao *ao, bool cut_audio)
@@ -79,9 +95,11 @@ static int init(struct ao *ao, char *params)
     }
     desired.freq = ao->samplerate;
     desired.channels = ao->channels;
-    desired.samples = 8192;
+    desired.samples = BUFFSIZE / (SDL_AUDIO_BITSIZE(desired.format) * desired.channels);
     desired.callback = audio_callback;
     desired.userdata = ao;
+
+    buffer = av_fifo_alloc(BUFFSIZE);
 
     SDL_OpenAudio(&desired, &obtained);
 
@@ -103,6 +121,9 @@ static int init(struct ao *ao, char *params)
     }
     ao->samplerate = obtained.freq;
     ao->channels = obtained.channels;
+    ao->bps = ao->channels * ao->samplerate * (SDL_AUDIO_BITSIZE(obtained.format)) / 8;
+    ao->buffersize = CHUNK_SIZE * NUM_CHUNKS;
+    ao->outburst = CHUNK_SIZE;
 
     priv->unpause = 1;
 
