@@ -42,32 +42,6 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
     // block if needed!
 }
 
-static int init(struct ao *ao, char *params)
-{
-    struct priv *priv = talloc_zero_size(ao, sizeof(priv));
-    ao->priv = priv;
-
-    SDL_InitSubSystem(SDL_INIT_AUDIO);
-
-    SDL_AudioSpec desired, obtained;
-
-    desired.format = ...;
-    desired.freq = ao->samplerate;
-    desired.channels = ao->channels;
-    desired.samples = 8192;
-    desired.callback = audio_callback;
-    desired.userdata = ao;
-
-    SDL_OpenAudio(&desired, &obtained);
-
-    // move back obtained data
-    // open audio device via SDL_OpenAudio
-
-    priv->unpause = 1;
-
-    return 1;
-}
-
 static void uninit(struct ao *ao, bool cut_audio)
 {
     struct priv *priv = ao->priv;
@@ -79,6 +53,60 @@ static void uninit(struct ao *ao, bool cut_audio)
 
     talloc_free(ao->priv);
     ao->priv = NULL;
+}
+
+static int init(struct ao *ao, char *params)
+{
+    struct priv *priv = talloc_zero_size(ao, sizeof(priv));
+    ao->priv = priv;
+
+    SDL_InitSubSystem(SDL_INIT_AUDIO);
+
+    SDL_AudioSpec desired, obtained;
+
+    switch (ao->format) {
+        case AF_FORMAT_U8: desired.format = AUDIO_U8; break;
+        case AF_FORMAT_S8: desired.format = AUDIO_S8; break;
+        case AF_FORMAT_U16_LE: desired.format = AUDIO_U16LSB; break;
+        case AF_FORMAT_U16_BE: desired.format = AUDIO_U16MSB; break;
+        default:
+        case AF_FORMAT_S16_LE: desired.format = AUDIO_S16LSB; break;
+        case AF_FORMAT_S16_BE: desired.format = AUDIO_S16MSB; break;
+        case AF_FORMAT_S32_LE: desired.format = AUDIO_S32LSB; break;
+        case AF_FORMAT_S32_BE: desired.format = AUDIO_S32MSB; break;
+        case AF_FORMAT_FLOAT_LE: desired.format = AUDIO_F32LSB; break;
+        case AF_FORMAT_FLOAT_BE: desired.format = AUDIO_F32MSB; break;
+    }
+    desired.freq = ao->samplerate;
+    desired.channels = ao->channels;
+    desired.samples = 8192;
+    desired.callback = audio_callback;
+    desired.userdata = ao;
+
+    SDL_OpenAudio(&desired, &obtained);
+
+    switch (obtained.format) {
+        case AUDIO_U8: ao->format = AF_FORMAT_U8; break;
+        case AUDIO_S8: ao->format = AF_FORMAT_S8; break;
+        case AUDIO_S16LSB: ao->format = AF_FORMAT_S16_LE; break;
+        case AUDIO_S16MSB: ao->format = AF_FORMAT_S16_BE; break;
+        case AUDIO_U16LSB: ao->format = AF_FORMAT_U16_LE; break;
+        case AUDIO_U16MSB: ao->format = AF_FORMAT_U16_BE; break;
+        case AUDIO_S32LSB: ao->format = AF_FORMAT_S32_LE; break;
+        case AUDIO_S32MSB: ao->format = AF_FORMAT_S32_BE; break;
+        case AUDIO_F32LSB: ao->format = AF_FORMAT_FLOAT_LE; break;
+        case AUDIO_F32MSB: ao->format = AF_FORMAT_FLOAT_BE; break;
+        default:
+           mp_msg(MSGT_AO, MSGL_ERR, "[sdl2] could not find matching format\n");
+           uninit(ao, true);
+           return 0;
+    }
+    ao->samplerate = obtained.freq;
+    ao->channels = obtained.channels;
+
+    priv->unpause = 1;
+
+    return 1;
 }
 
 static void reset(struct ao *ao)
