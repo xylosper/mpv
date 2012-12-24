@@ -32,7 +32,7 @@
 //! after a short time of playback
 #define CHUNK_SIZE (16 * 1024)
 //! number of "virtual" chunks the buffer consists of
-#define NUM_CHUNKS 8
+#define NUM_CHUNKS 4
 #define BUFFSIZE (NUM_CHUNKS * CHUNK_SIZE)
 
 struct priv
@@ -104,8 +104,6 @@ static int init(struct ao *ao, char *params)
     desired.callback = audio_callback;
     desired.userdata = ao;
 
-    priv->buffer = av_fifo_alloc(BUFFSIZE);
-
     SDL_OpenAudio(&desired, &obtained);
 
     switch (obtained.format) {
@@ -127,8 +125,9 @@ static int init(struct ao *ao, char *params)
     ao->samplerate = obtained.freq;
     ao->channels = obtained.channels;
     ao->bps = ao->channels * ao->samplerate * (SDL_AUDIO_BITSIZE(obtained.format)) / 8;
-    ao->buffersize = CHUNK_SIZE * NUM_CHUNKS;
-    ao->outburst = CHUNK_SIZE;
+    ao->buffersize = obtained.size * NUM_CHUNKS;
+    ao->outburst = obtained.size;
+    priv->buffer = av_fifo_alloc(ao->buffersize);
 
     priv->unpause = 1;
 
@@ -162,6 +161,7 @@ static int play(struct ao *ao, void *data, int len, int flags)
     int ret = av_fifo_generic_write(priv->buffer, data, len, NULL);
     //UNLOCK
     if (priv->unpause) {
+        mp_msg(MSGT_AO, MSGL_INFO, "resume\n", ret);
         priv->unpause = 0;
         SDL_PauseAudio(SDL_FALSE);
     }
