@@ -46,13 +46,14 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
     struct ao *ao = userdata;
     struct priv *priv = ao->priv;
 
-    while (len)
-    {
+    while (len) {
+        //LOCK
         int got = av_fifo_generic_read(priv->buffer, stream, len, NULL);
+        //UNLOCK
         if (got < 0)
             break;
         if (got == 0)
-            BLOCK;
+            SDL_Sleep(10); // FIXME hack
         len -= got;
         stream += len;
     }
@@ -133,21 +134,28 @@ static int init(struct ao *ao, char *params)
 static void reset(struct ao *ao)
 {
     struct priv *priv = ao->priv;
-    // flush buffer (seek)
+    //LOCK
+    av_fifo_reset(priv->buffer);
+    //UNLOCK
 }
 
 static int get_space(struct ao *ao)
 {
     struct priv *priv = ao->priv;
-    return av_fifo_space(priv->buffer);
+    //LOCK
+    int space = av_fifo_space(priv->buffer);
+    //UNLOCK
+    return space;
 }
 
 static int play(struct ao *ao, void *data, int len, int flags)
 {
     struct priv *priv = ao->priv;
+    //LOCK
     int free = av_fifo_space(priv->buffer);
     if (len > free) len = free;
     int ret = av_fifo_generic_write(priv->buffer, data, len, NULL);
+    //UNLOCK
     if (priv->unpause) {
         priv->unpause = 0;
         SDL_PauseAudio(SDL_FALSE);
@@ -158,9 +166,11 @@ static int play(struct ao *ao, void *data, int len, int flags)
 static float get_delay(struct ao *ao)
 {
     struct priv *priv = ao->priv;
-    // get delay in seconds
-    // this is buffer length + SDL's own latency
-    return 0;
+    //LOCK
+    int sz = av_fifo_size(priv->buffer);
+    //UNLOCK
+    // TODO add SDL's own delay?
+    return sz / (float) ao->bps;
 }
 
 static void pause(struct ao *ao)
