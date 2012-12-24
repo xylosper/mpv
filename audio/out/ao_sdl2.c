@@ -33,6 +33,14 @@ struct priv
     AVFifoBuffer *buffer;
 };
 
+static void audio_callback(void *userdata, Uint8 *stream, int len)
+{
+    struct ao *ao = userdata;
+    struct priv *priv = ao->priv;
+    // get len bytes for buffer
+    // block if needed!
+}
+
 static int init(struct ao *ao, char *params)
 {
     struct priv *priv = talloc_zero_size(ao, sizeof(priv));
@@ -40,7 +48,18 @@ static int init(struct ao *ao, char *params)
 
     SDL_InitSubSystem(SDL_INIT_AUDIO);
 
-    // negotiate sample rate, etc.
+    SDL_AudioSpec desired, obtained;
+
+    desired.format = ...;
+    desired.freq = ao->samplerate;
+    desired.channels = ao->channels;
+    desired.samples = 8192;
+    desired.callback = audio_callback;
+    desired.userdata = ao;
+
+    SDL_OpenAudio(&desired, &obtained);
+
+    // move back obtained data
     // open audio device via SDL_OpenAudio
 
     SDL_PauseAudio(0);
