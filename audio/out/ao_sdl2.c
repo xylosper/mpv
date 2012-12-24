@@ -43,7 +43,6 @@ struct priv
 
 static void audio_callback(void *userdata, Uint8 *stream, int len)
 {
-    mp_msg(MSGT_AO, MSGL_INFO, "cb\n");
     struct ao *ao = userdata;
     struct priv *priv = ao->priv;
 
@@ -104,7 +103,12 @@ static int init(struct ao *ao, char *params)
     desired.callback = audio_callback;
     desired.userdata = ao;
 
-    SDL_OpenAudio(&desired, &obtained);
+    obtained = desired;
+    if (SDL_OpenAudio(&desired, &obtained)) {
+        mp_msg(MSGT_AO, MSGL_ERR, "[sdl2] could not open audio: %s\n",
+            SDL_GetError());
+        uninit(ao, true);
+    }
 
     switch (obtained.format) {
         case AUDIO_U8: ao->format = AF_FORMAT_U8; break;
