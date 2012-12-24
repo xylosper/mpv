@@ -26,6 +26,8 @@
 #include "core/mp_msg.h"
 #include "libavutil/fifo.h"
 
+#include <SDL.h>
+
 struct priv
 {
     AVFifoBuffer *buffer;
@@ -35,8 +37,14 @@ static int init(struct ao *ao, char *params)
 {
     struct priv *priv = talloc_zero_size(ao, sizeof(priv));
     ao->priv = priv;
+
+    SDL_InitSubSystem(SDL_INIT_AUDIO);
+
     // negotiate sample rate, etc.
-    // open audio device
+    // open audio device via SDL_OpenAudio
+
+    SDL_PauseAudio(0);
+
     return 1;
 }
 
@@ -45,7 +53,10 @@ static void uninit(struct ao *ao, bool cut_audio)
     struct priv *priv = ao->priv;
     if (!priv)
         return;
+
     // close audio device
+    SDL_QuitSubSystem(SDL_INIT_AUDIO);
+
     talloc_free(ao->priv);
     ao->priv = NULL;
 }
@@ -81,13 +92,13 @@ static float get_delay(struct ao *ao)
 static void pause(struct ao *ao)
 {
     struct priv *priv = ao->priv;
-    // pause output
+    SDL_PauseAudio(SDL_TRUE);
 }
 
 static void resume(struct ao *ao)
 {
     struct priv *priv = ao->priv;
-    // resume output
+    SDL_PauseAudio(SDL_FALSE);
 }
 
 const struct ao_driver audio_out_sdl2 = {
