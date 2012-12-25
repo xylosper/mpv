@@ -206,6 +206,7 @@ static void pause(struct ao *ao)
     struct priv *priv = ao->priv;
     SDL_PauseAudio(SDL_TRUE);
     priv->paused = 1;
+    SDL_CondSignal(priv->underrun_cond);
 }
 
 static void resume(struct ao *ao)
