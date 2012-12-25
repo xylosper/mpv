@@ -54,11 +54,13 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
         int got = av_fifo_size(priv->buffer);
         if (got > len)
             got = len;
-        av_fifo_generic_read(priv->buffer, stream, got, NULL);
-        if (got == 0)
+        if (got > 0) {
+            av_fifo_generic_read(priv->buffer, stream, got, NULL);
+            len -= got;
+            stream += len;
+        }
+        if (len > 0)
             SDL_CondWait(priv->underrun_cond, priv->buffer_mutex);
-        len -= got;
-        stream += len;
     }
 
     SDL_UnlockMutex(priv->buffer_mutex);
