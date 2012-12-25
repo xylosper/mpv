@@ -119,22 +119,31 @@ static int init(struct ao *ao, char *params)
 
     SDL_AudioSpec desired, obtained;
 
+    int bytes = 0;
     switch (ao->format) {
-        case AF_FORMAT_U8: desired.format = AUDIO_U8; break;
-        case AF_FORMAT_S8: desired.format = AUDIO_S8; break;
-        case AF_FORMAT_U16_LE: desired.format = AUDIO_U16LSB; break;
-        case AF_FORMAT_U16_BE: desired.format = AUDIO_U16MSB; break;
+        case AF_FORMAT_U8: desired.format = AUDIO_U8; bytes = 1; break;
+        case AF_FORMAT_S8: desired.format = AUDIO_S8; bytes = 1; break;
+        case AF_FORMAT_U16_LE: desired.format = AUDIO_U16LSB; bytes = 2; break;
+        case AF_FORMAT_U16_BE: desired.format = AUDIO_U16MSB; bytes = 2; break;
         default:
-        case AF_FORMAT_S16_LE: desired.format = AUDIO_S16LSB; break;
-        case AF_FORMAT_S16_BE: desired.format = AUDIO_S16MSB; break;
-        case AF_FORMAT_S32_LE: desired.format = AUDIO_S32LSB; break;
-        case AF_FORMAT_S32_BE: desired.format = AUDIO_S32MSB; break;
-        case AF_FORMAT_FLOAT_LE: desired.format = AUDIO_F32LSB; break;
-        case AF_FORMAT_FLOAT_BE: desired.format = AUDIO_F32MSB; break;
+        case AF_FORMAT_S16_LE: desired.format = AUDIO_S16LSB; bytes = 2; break;
+        case AF_FORMAT_S16_BE: desired.format = AUDIO_S16MSB; bytes = 2; break;
+#ifdef AUDIO_S32LSB
+        case AF_FORMAT_S32_LE: desired.format = AUDIO_S32LSB; bytes = 4; break;
+#endif
+#ifdef AUDIO_S32MSB
+        case AF_FORMAT_S32_BE: desired.format = AUDIO_S32MSB; bytes = 4; break;
+#endif
+#ifdef AUDIO_F32LSB
+        case AF_FORMAT_FLOAT_LE: desired.format = AUDIO_F32LSB; bytes = 4; break;
+#endif
+#ifdef AUDIO_F32MSB
+        case AF_FORMAT_FLOAT_BE: desired.format = AUDIO_F32MSB; bytes = 4; break;
+#endif
     }
     desired.freq = ao->samplerate;
     desired.channels = ao->channels;
-    desired.samples = CHUNK_SIZE / (SDL_AUDIO_BITSIZE(desired.format) * desired.channels);
+    desired.samples = CHUNK_SIZE / (bytes * desired.channels);
     desired.callback = audio_callback;
     desired.userdata = ao;
 
@@ -147,16 +156,24 @@ static int init(struct ao *ao, char *params)
     }
 
     switch (obtained.format) {
-        case AUDIO_U8: ao->format = AF_FORMAT_U8; break;
-        case AUDIO_S8: ao->format = AF_FORMAT_S8; break;
-        case AUDIO_S16LSB: ao->format = AF_FORMAT_S16_LE; break;
-        case AUDIO_S16MSB: ao->format = AF_FORMAT_S16_BE; break;
-        case AUDIO_U16LSB: ao->format = AF_FORMAT_U16_LE; break;
-        case AUDIO_U16MSB: ao->format = AF_FORMAT_U16_BE; break;
-        case AUDIO_S32LSB: ao->format = AF_FORMAT_S32_LE; break;
-        case AUDIO_S32MSB: ao->format = AF_FORMAT_S32_BE; break;
-        case AUDIO_F32LSB: ao->format = AF_FORMAT_FLOAT_LE; break;
-        case AUDIO_F32MSB: ao->format = AF_FORMAT_FLOAT_BE; break;
+        case AUDIO_U8: ao->format = AF_FORMAT_U8; bytes = 1; break;
+        case AUDIO_S8: ao->format = AF_FORMAT_S8; bytes = 1; break;
+        case AUDIO_S16LSB: ao->format = AF_FORMAT_S16_LE; bytes = 2; break;
+        case AUDIO_S16MSB: ao->format = AF_FORMAT_S16_BE; bytes = 2; break;
+        case AUDIO_U16LSB: ao->format = AF_FORMAT_U16_LE; bytes = 2; break;
+        case AUDIO_U16MSB: ao->format = AF_FORMAT_U16_BE; bytes = 2; break;
+#ifdef AUDIO_S32LSB
+        case AUDIO_S32LSB: ao->format = AF_FORMAT_S32_LE; bytes = 4; break;
+#endif
+#ifdef AUDIO_S32MSB
+        case AUDIO_S32MSB: ao->format = AF_FORMAT_S32_BE; bytes = 4; break;
+#endif
+#ifdef AUDIO_F32LSB
+        case AUDIO_F32LSB: ao->format = AF_FORMAT_FLOAT_LE; bytes = 4; break;
+#endif
+#ifdef AUDIO_F32MSB
+        case AUDIO_F32MSB: ao->format = AF_FORMAT_FLOAT_BE; bytes = 4; break;
+#endif
         default:
            mp_msg(MSGT_AO, MSGL_ERR, "[sdl2] could not find matching format\n");
            uninit(ao, true);
@@ -164,7 +181,7 @@ static int init(struct ao *ao, char *params)
     }
     ao->samplerate = obtained.freq;
     ao->channels = obtained.channels;
-    ao->bps = ao->channels * ao->samplerate * (SDL_AUDIO_BITSIZE(obtained.format)) / 8;
+    ao->bps = ao->channels * ao->samplerate * bytes;
     ao->buffersize = obtained.size * NUM_CHUNKS;
     ao->outburst = obtained.size;
     priv->buffer = av_fifo_alloc(ao->buffersize);
