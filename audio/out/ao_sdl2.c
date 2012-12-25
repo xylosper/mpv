@@ -72,8 +72,13 @@ static void uninit(struct ao *ao, bool cut_audio)
 
     // abort the callback
     priv->paused = 1;
+
+    if (priv->buffer_mutex)
+        SDL_LockMutex(priv->buffer_mutex);
     if (priv->underrun_cond)
         SDL_CondSignal(priv->underrun_cond);
+    if (priv->buffer_mutex)
+        SDL_UnlockMutex(priv->buffer_mutex);
 
     // make sure the callback exits
     SDL_LockAudio();
