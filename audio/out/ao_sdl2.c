@@ -30,7 +30,7 @@
 
 //! size of one chunk, if this is too small MPlayer will start to "stutter"
 //! after a short time of playback
-#define CHUNK_SIZE (16 * 1024)
+#define CHUNK_SIZE 2048
 //! number of "virtual" chunks the buffer consists of
 #define NUM_CHUNKS 4
 
@@ -75,18 +75,20 @@ static void uninit(struct ao *ao, bool cut_audio)
     // abort the callback
     priv->paused = 1;
 
-    if (priv->buffer_mutex)
-        SDL_LockMutex(priv->buffer_mutex);
-    if (priv->underrun_cond)
-        SDL_CondSignal(priv->underrun_cond);
-    if (priv->buffer_mutex)
-        SDL_UnlockMutex(priv->buffer_mutex);
+    if (SDL_WasInit(SDL_INIT_AUDIO)) {
+        if (priv->buffer_mutex)
+            SDL_LockMutex(priv->buffer_mutex);
+        if (priv->underrun_cond)
+            SDL_CondSignal(priv->underrun_cond);
+        if (priv->buffer_mutex)
+            SDL_UnlockMutex(priv->buffer_mutex);
 
-    // make sure the callback exits
-    SDL_LockAudio();
+        // make sure the callback exits
+        SDL_LockAudio();
 
-    // close audio device
-    SDL_QuitSubSystem(SDL_INIT_AUDIO);
+        // close audio device
+        SDL_QuitSubSystem(SDL_INIT_AUDIO);
+    }
 
     // get rid of the mutex
     if (priv->underrun_cond)
@@ -141,6 +143,7 @@ static int init(struct ao *ao, char *params)
         mp_msg(MSGT_AO, MSGL_ERR, "[sdl2] could not open audio: %s\n",
             SDL_GetError());
         uninit(ao, true);
+        return -1;
     }
 
     switch (obtained.format) {
