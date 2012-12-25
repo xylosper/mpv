@@ -38,6 +38,7 @@
 struct priv
 {
     AVFifoBuffer *buffer;
+    SDL_mutex *buffer_mutex;
     bool unpause;
 };
 
@@ -47,9 +48,9 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
     struct priv *priv = ao->priv;
 
     while (len) {
-        //LOCK
+        SDL_LockMutex(priv->buffer_mutex);
         int got = av_fifo_generic_read(priv->buffer, stream, len, NULL);
-        //UNLOCK
+        SDL_UnlockMutex(priv->buffer_mutex);
         if (got < 0)
             break;
         if (got == 0)
@@ -65,9 +66,15 @@ static void uninit(struct ao *ao, bool cut_audio)
     if (!priv)
         return;
 
+    if (priv->buffer_mutex)
+        SDL_LockMutex(priv->buffer_mutex);
+
     // close audio device
     SDL_QuitSubSystem(SDL_INIT_AUDIO | SDL_INIT_TIMER);
 
+    // get rid of the mutex
+    if (priv->buffer_mutex)
+        SDL_DestroyMutex(priv->buffer_mutex);
     if (priv->buffer)
         av_fifo_free(priv->buffer);
 
@@ -132,6 +139,7 @@ static int init(struct ao *ao, char *params)
     ao->buffersize = obtained.size * NUM_CHUNKS;
     ao->outburst = obtained.size;
     priv->buffer = av_fifo_alloc(ao->buffersize);
+    priv->buffer_mutex = SDL_CreateMutex();
 
     priv->unpause = 1;
 
@@ -141,17 +149,17 @@ static int init(struct ao *ao, char *params)
 static void reset(struct ao *ao)
 {
     struct priv *priv = ao->priv;
-    //LOCK
+    SDL_LockMutex(priv->buffer_mutex);
     av_fifo_reset(priv->buffer);
-    //UNLOCK
+    SDL_UnlockMutex(priv->buffer_mutex);
 }
 
 static int get_space(struct ao *ao)
 {
     struct priv *priv = ao->priv;
-    //LOCK
+    SDL_LockMutex(priv->buffer_mutex);
     int space = av_fifo_space(priv->buffer);
-    //UNLOCK
+    SDL_UnlockMutex(priv->buffer_mutex);
     return space;
 }
 
@@ -159,11 +167,11 @@ static int play(struct ao *ao, void *data, int len, int flags)
 {
     mp_msg(MSGT_AO, MSGL_INFO, "play\n");
     struct priv *priv = ao->priv;
-    //LOCK
+    SDL_LockMutex(priv->buffer_mutex);
     int free = av_fifo_space(priv->buffer);
     if (len > free) len = free;
     int ret = av_fifo_generic_write(priv->buffer, data, len, NULL);
-    //UNLOCK
+    SDL_UnlockMutex(priv->buffer_mutex);
     if (priv->unpause) {
         mp_msg(MSGT_AO, MSGL_INFO, "resume\n", ret);
         priv->unpause = 0;
@@ -176,9 +184,9 @@ static int play(struct ao *ao, void *data, int len, int flags)
 static float get_delay(struct ao *ao)
 {
     struct priv *priv = ao->priv;
-    //LOCK
+    SDL_LockMutex(priv->buffer_mutex);
     int sz = av_fifo_size(priv->buffer);
-    //UNLOCK
+    SDL_UnlockMutex(priv->buffer_mutex);
     // TODO add SDL's own delay?
     return sz / (float) ao->bps;
 }
