@@ -208,16 +208,23 @@ static void pause(struct ao *ao)
 {
     struct priv *priv = ao->priv;
     SDL_PauseAudio(SDL_TRUE);
+    priv->unpause = 0;
     priv->paused = 1;
     SDL_CondSignal(priv->underrun_cond);
 }
 
-static void resume(struct ao *ao)
+static void do_resume(struct ao *ao)
 {
     struct priv *priv = ao->priv;
     priv->paused = 0;
     SDL_CondSignal(priv->underrun_cond);
     SDL_PauseAudio(SDL_FALSE);
+}
+
+static void resume(struct ao *ao)
+{
+    struct priv *priv = ao->priv;
+    priv->unpause = 1;
 }
 
 static int play(struct ao *ao, void *data, int len, int flags)
@@ -231,7 +238,7 @@ static int play(struct ao *ao, void *data, int len, int flags)
     SDL_UnlockMutex(priv->buffer_mutex);
     if (priv->unpause) {
         priv->unpause = 0;
-        resume(ao);
+        do_resume(ao);
     }
     return ret;
 }
