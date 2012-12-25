@@ -28,9 +28,6 @@
 
 #include <SDL.h>
 
-//! size of one chunk, if this is too small MPlayer will start to "stutter"
-//! after a short time of playback
-#define CHUNK_SIZE 2048
 //! number of "virtual" chunks the buffer consists of
 #define NUM_CHUNKS 4
 
@@ -143,9 +140,14 @@ static int init(struct ao *ao, char *params)
     }
     desired.freq = ao->samplerate;
     desired.channels = ao->channels;
-    desired.samples = CHUNK_SIZE / (bytes * desired.channels);
+    desired.samples = ao->samplerate / 50; // FIXME parametrize?
     desired.callback = audio_callback;
     desired.userdata = ao;
+
+    mp_msg(MSGT_AO, MSGL_V, "[sdl] requested format: %d Hz, %d channels, %x, "
+           "buffer size: %d samples\n",
+           (int) desired.freq, (int) desired.channels,
+           (int) desired.format, (int) desired.samples);
 
     obtained = desired;
     if (SDL_OpenAudio(&desired, &obtained)) {
@@ -154,6 +156,11 @@ static int init(struct ao *ao, char *params)
         uninit(ao, true);
         return -1;
     }
+
+    mp_msg(MSGT_AO, MSGL_V, "[sdl] obtained format: %d Hz, %d channels, %x, "
+           "buffer size: %d samples (%d bytes)\n",
+           (int) obtained.freq, (int) obtained.channels,
+           (int) obtained.format, (int) obtained.samples);
 
     switch (obtained.format) {
         case AUDIO_U8: ao->format = AF_FORMAT_U8; bytes = 1; break;
@@ -179,6 +186,7 @@ static int init(struct ao *ao, char *params)
            uninit(ao, true);
            return -1;
     }
+
     ao->samplerate = obtained.freq;
     ao->channels = obtained.channels;
     ao->bps = ao->channels * ao->samplerate * bytes;
@@ -234,14 +242,19 @@ static void do_resume(struct ao *ao)
 {
     struct priv *priv = ao->priv;
     priv->paused = 0;
-    SDL_CondSignal(priv->underrun_cond);
     SDL_PauseAudio(SDL_FALSE);
 }
 
 static void resume(struct ao *ao)
 {
     struct priv *priv = ao->priv;
-    priv->unpause = 1;
+    SDL_LockMutex(priv->buffer_mutex);
+    int free = av_fifo_space(priv->buffer);
+    SDL_UnlockMutex(priv->buffer_mutex);
+    if (free)
+        priv->unpause = 1;
+    else
+        do_resume(ao);
 }
 
 static int play(struct ao *ao, void *data, int len, int flags)
@@ -250,14 +263,14 @@ static int play(struct ao *ao, void *data, int len, int flags)
     SDL_LockMutex(priv->buffer_mutex);
     int free = av_fifo_space(priv->buffer);
     if (len > free) len = free;
-    int ret = av_fifo_generic_write(priv->buffer, data, len, NULL);
+    av_fifo_generic_write(priv->buffer, data, len, NULL);
     SDL_CondSignal(priv->underrun_cond);
     SDL_UnlockMutex(priv->buffer_mutex);
     if (priv->unpause) {
         priv->unpause = 0;
         do_resume(ao);
     }
-    return ret;
+    return len;
 }
 
 static float get_delay(struct ao *ao)
