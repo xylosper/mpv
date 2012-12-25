@@ -160,7 +160,7 @@ static int init(struct ao *ao, char *params)
         default:
            mp_msg(MSGT_AO, MSGL_ERR, "[sdl2] could not find matching format\n");
            uninit(ao, true);
-           return 0;
+           return -1;
     }
     ao->samplerate = obtained.freq;
     ao->channels = obtained.channels;
