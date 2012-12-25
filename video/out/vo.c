@@ -83,7 +83,7 @@ extern struct vo_driver video_out_lavc;
 extern struct vo_driver video_out_caca;
 extern struct vo_driver video_out_direct3d;
 extern struct vo_driver video_out_direct3d_shaders;
-extern struct vo_driver video_out_sdl2;
+extern struct vo_driver video_out_sdl;
 extern struct vo_driver video_out_corevideo;
 
 const struct vo_driver *video_out_drivers[] =
@@ -112,7 +112,7 @@ const struct vo_driver *video_out_drivers[] =
 #endif
 #endif
 #ifdef CONFIG_SDL2
-        &video_out_sdl2,
+        &video_out_sdl,
 #endif
 #ifdef CONFIG_X11
         &video_out_x11,

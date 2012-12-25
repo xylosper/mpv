@@ -105,7 +105,7 @@ static void uninit(struct ao *ao, bool cut_audio)
 static int init(struct ao *ao, char *params)
 {
     if (SDL_WasInit(SDL_INIT_AUDIO)) {
-        mp_msg(MSGT_AO, MSGL_ERR, "[sdl2] already initialized\n");
+        mp_msg(MSGT_AO, MSGL_ERR, "[sdl] already initialized\n");
         return -1;
     }
 
@@ -113,7 +113,7 @@ static int init(struct ao *ao, char *params)
     ao->priv = priv;
 
     if (SDL_InitSubSystem(SDL_INIT_AUDIO)) {
-        mp_msg(MSGT_AO, MSGL_ERR, "[sdl2] SDL_Init failed\n");
+        mp_msg(MSGT_AO, MSGL_ERR, "[sdl] SDL_Init failed\n");
         return -1;
     }
 
@@ -149,7 +149,7 @@ static int init(struct ao *ao, char *params)
 
     obtained = desired;
     if (SDL_OpenAudio(&desired, &obtained)) {
-        mp_msg(MSGT_AO, MSGL_ERR, "[sdl2] could not open audio: %s\n",
+        mp_msg(MSGT_AO, MSGL_ERR, "[sdl] could not open audio: %s\n",
             SDL_GetError());
         uninit(ao, true);
         return -1;
@@ -175,7 +175,7 @@ static int init(struct ao *ao, char *params)
         case AUDIO_F32MSB: ao->format = AF_FORMAT_FLOAT_BE; bytes = 4; break;
 #endif
         default:
-           mp_msg(MSGT_AO, MSGL_ERR, "[sdl2] could not find matching format\n");
+           mp_msg(MSGT_AO, MSGL_ERR, "[sdl] could not find matching format\n");
            uninit(ao, true);
            return -1;
     }
@@ -187,13 +187,13 @@ static int init(struct ao *ao, char *params)
     priv->buffer = av_fifo_alloc(ao->buffersize);
     priv->buffer_mutex = SDL_CreateMutex();
     if (!priv->buffer_mutex) {
-        mp_msg(MSGT_AO, MSGL_ERR, "[sdl2] SDL_CreateMutex failed\n");
+        mp_msg(MSGT_AO, MSGL_ERR, "[sdl] SDL_CreateMutex failed\n");
         uninit(ao, true);
         return -1;
     }
     priv->underrun_cond = SDL_CreateCond();
     if (!priv->underrun_cond) {
-        mp_msg(MSGT_AO, MSGL_ERR, "[sdl2] SDL_CreateCond failed\n");
+        mp_msg(MSGT_AO, MSGL_ERR, "[sdl] SDL_CreateCond failed\n");
         uninit(ao, true);
         return -1;
     }
@@ -270,11 +270,11 @@ static float get_delay(struct ao *ao)
     return sz / (float) ao->bps;
 }
 
-const struct ao_driver audio_out_sdl2 = {
+const struct ao_driver audio_out_sdl = {
     .is_new = true,
     .info = &(const struct ao_info) {
-        "SDL2",
-        "sdl2",
+        "SDL Audio",
+        "sdl",
         "Rudolf Polzer <divVerent@xonotic.org>",
         ""
     },

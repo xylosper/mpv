@@ -45,7 +45,7 @@ extern const struct ao_driver audio_out_pcm;
 extern const struct ao_driver audio_out_pss;
 extern const struct ao_driver audio_out_lavc;
 extern const struct ao_driver audio_out_portaudio;
-extern const struct ao_driver audio_out_sdl2;
+extern const struct ao_driver audio_out_sdl;
 
 static const struct ao_driver * const audio_out_drivers[] = {
 // native:
@@ -74,8 +74,8 @@ static const struct ao_driver * const audio_out_drivers[] = {
 #ifdef CONFIG_OPENAL
     &audio_out_openal,
 #endif
-#ifdef CONFIG_SDL2
-    &audio_out_sdl2,
+#ifdef CONFIG_SDL
+    &audio_out_sdl,
 #endif
     &audio_out_null,
     // should not be auto-selected:
