@@ -33,13 +33,13 @@
 #define CHUNK_SIZE (16 * 1024)
 //! number of "virtual" chunks the buffer consists of
 #define NUM_CHUNKS 4
-#define BUFFSIZE (NUM_CHUNKS * CHUNK_SIZE)
 
 struct priv
 {
     AVFifoBuffer *buffer;
     SDL_mutex *buffer_mutex;
     bool unpause;
+    bool paused;
 };
 
 static void audio_callback(void *userdata, Uint8 *stream, int len)
@@ -47,9 +47,12 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
     struct ao *ao = userdata;
     struct priv *priv = ao->priv;
 
-    while (len) {
+    while (len && !priv->paused) {
         SDL_LockMutex(priv->buffer_mutex);
-        int got = av_fifo_generic_read(priv->buffer, stream, len, NULL);
+        int got = av_fifo_size(priv->buffer);
+        if (got > len)
+            got = len;
+        av_fifo_generic_read(priv->buffer, stream, got, NULL);
         SDL_UnlockMutex(priv->buffer_mutex);
         if (got < 0)
             break;
@@ -65,6 +68,9 @@ static void uninit(struct ao *ao, bool cut_audio)
     struct priv *priv = ao->priv;
     if (!priv)
         return;
+
+    // abort the callback
+    priv->paused = 1;
 
     if (priv->buffer_mutex)
         SDL_LockMutex(priv->buffer_mutex);
@@ -106,7 +112,7 @@ static int init(struct ao *ao, char *params)
     }
     desired.freq = ao->samplerate;
     desired.channels = ao->channels;
-    desired.samples = BUFFSIZE / (SDL_AUDIO_BITSIZE(desired.format) * desired.channels);
+    desired.samples = CHUNK_SIZE / (SDL_AUDIO_BITSIZE(desired.format) * desired.channels);
     desired.callback = audio_callback;
     desired.userdata = ao;
 
@@ -142,6 +148,7 @@ static int init(struct ao *ao, char *params)
     priv->buffer_mutex = SDL_CreateMutex();
 
     priv->unpause = 1;
+    priv->paused = 1;
 
     return 1;
 }
@@ -165,7 +172,6 @@ static int get_space(struct ao *ao)
 
 static int play(struct ao *ao, void *data, int len, int flags)
 {
-    mp_msg(MSGT_AO, MSGL_INFO, "play\n");
     struct priv *priv = ao->priv;
     SDL_LockMutex(priv->buffer_mutex);
     int free = av_fifo_space(priv->buffer);
@@ -173,11 +179,10 @@ static int play(struct ao *ao, void *data, int len, int flags)
     int ret = av_fifo_generic_write(priv->buffer, data, len, NULL);
     SDL_UnlockMutex(priv->buffer_mutex);
     if (priv->unpause) {
-        mp_msg(MSGT_AO, MSGL_INFO, "resume\n", ret);
         priv->unpause = 0;
         SDL_PauseAudio(SDL_FALSE);
+        priv->paused = 0;
     }
-    mp_msg(MSGT_AO, MSGL_INFO, "play -> %d\n", ret);
     return ret;
 }
 
@@ -195,11 +200,13 @@ static void pause(struct ao *ao)
 {
     struct priv *priv = ao->priv;
     SDL_PauseAudio(SDL_TRUE);
+    priv->paused = 1;
 }
 
 static void resume(struct ao *ao)
 {
     struct priv *priv = ao->priv;
+    priv->paused = 0;
     SDL_PauseAudio(SDL_FALSE);
 }
 
