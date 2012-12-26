@@ -43,8 +43,8 @@ struct priv
     bool unpause;
     bool paused;
 #ifdef ESTIMATE_DELAY
-    unsigned int callback_times[2];
-    unsigned int play_time;
+    unsigned int callback_time0;
+    unsigned int callback_time1;
 #endif
 };
 
@@ -56,8 +56,8 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
     SDL_LockMutex(priv->buffer_mutex);
 
 #ifdef ESTIMATE_DELAY
-    priv->callback_times[1] = priv->callback_times[0];
-    priv->callback_times[0] = GetTimer();
+    priv->callback_time1 = priv->callback_time0;
+    priv->callback_time0 = GetTimer();
 #endif
 
     while (len && !priv->paused) {
@@ -230,6 +230,7 @@ static int init(struct ao *ao, char *params)
 
     priv->unpause = 1;
     priv->paused = 1;
+    priv->callback_time0 = priv->callback_time1 = GetTimer();
 
     return 1;
 }
@@ -292,9 +293,6 @@ static int play(struct ao *ao, void *data, int len, int flags)
         priv->unpause = 0;
         do_resume(ao);
     }
-#ifdef ESTIMATE_DELAY
-    priv->play_time = GetTimer();
-#endif
     return len;
 }
 
@@ -304,9 +302,8 @@ static float get_delay(struct ao *ao)
     SDL_LockMutex(priv->buffer_mutex);
     int sz = av_fifo_size(priv->buffer);
 #ifdef ESTIMATE_DELAY
-    unsigned int callback_time0 = priv->callback_times[0];
-    unsigned int callback_time1 = priv->callback_times[1];
-    unsigned int current_time = GetTimer();
+    unsigned int callback_time0 = priv->callback_time0;
+    unsigned int callback_time1 = priv->callback_time1;
 #endif
     SDL_UnlockMutex(priv->buffer_mutex);
 
@@ -315,11 +312,17 @@ static float get_delay(struct ao *ao)
 
 #ifdef ESTIMATE_DELAY
     // delay component: outstanding audio living in SDL
+
+    unsigned int current_time = GetTimer();
+
+    // interval between callbacks
     unsigned int callback_interval = callback_time0 - callback_time1;
-    unsigned int partial_interval = current_time - callback_time0;
+    unsigned int elapsed_interval = current_time - callback_time0;
+    if (elapsed_interval > callback_interval)
+        elapsed_interval = callback_interval;
 
     // delay subcomponent: remaining audio from the currently played buffer
-    unsigned int buffer_interval = callback_interval - partial_interval;
+    unsigned int buffer_interval = callback_interval - elapsed_interval;
 
     // delay subcomponent: remaining audio from the next played buffer, as
     // provided by the callback
