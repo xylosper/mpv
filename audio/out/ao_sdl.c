@@ -24,11 +24,15 @@
 #include "talloc.h"
 #include "ao.h"
 #include "core/mp_msg.h"
-#include "libavutil/fifo.h"
+#include "osdep/timer.h"
 
+#include <libavutil/fifo.h>
 #include <SDL.h>
 
-//! number of "virtual" chunks the buffer consists of
+// hack because SDL can't be asked about the current delay
+#define ESTIMATE_DELAY
+
+//! number of "virtual" chunks our buffer consists of
 #define NUM_CHUNKS 4
 
 struct priv
@@ -38,6 +42,10 @@ struct priv
     SDL_cond *underrun_cond;
     bool unpause;
     bool paused;
+#ifdef ESTIMATE_DELAY
+    unsigned int callback_times[2];
+    unsigned int play_time;
+#endif
 };
 
 static void audio_callback(void *userdata, Uint8 *stream, int len)
@@ -46,6 +54,11 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
     struct priv *priv = ao->priv;
 
     SDL_LockMutex(priv->buffer_mutex);
+
+#ifdef ESTIMATE_DELAY
+    priv->callback_times[1] = priv->callback_times[0];
+    priv->callback_times[0] = GetTimer();
+#endif
 
     while (len && !priv->paused) {
         int got = av_fifo_size(priv->buffer);
@@ -99,6 +112,14 @@ static void uninit(struct ao *ao, bool cut_audio)
     ao->priv = NULL;
 }
 
+static unsigned int ceil_power_of_two(unsigned int x)
+{
+    int y = 1;
+    while (y < x)
+        y *= 2;
+    return y;
+}
+
 static int init(struct ao *ao, char *params)
 {
     if (SDL_WasInit(SDL_INIT_AUDIO)) {
@@ -140,7 +161,8 @@ static int init(struct ao *ao, char *params)
     }
     desired.freq = ao->samplerate;
     desired.channels = ao->channels;
-    desired.samples = ao->samplerate / 50; // FIXME parametrize?
+    desired.samples = ceil_power_of_two(ao->samplerate / 50);
+        // 20ms to 40ms buffer should be ok
     desired.callback = audio_callback;
     desired.userdata = ao;
 
@@ -270,6 +292,9 @@ static int play(struct ao *ao, void *data, int len, int flags)
         priv->unpause = 0;
         do_resume(ao);
     }
+#ifdef ESTIMATE_DELAY
+    priv->play_time = GetTimer();
+#endif
     return len;
 }
 
@@ -278,9 +303,36 @@ static float get_delay(struct ao *ao)
     struct priv *priv = ao->priv;
     SDL_LockMutex(priv->buffer_mutex);
     int sz = av_fifo_size(priv->buffer);
+#ifdef ESTIMATE_DELAY
+    unsigned int callback_time0 = priv->callback_times[0];
+    unsigned int callback_time1 = priv->callback_times[1];
+    unsigned int current_time = GetTimer();
+#endif
     SDL_UnlockMutex(priv->buffer_mutex);
-    // TODO add SDL's own delay?
-    return sz / (float) ao->bps;
+
+    // delay component: our FIFO's length
+    float delay = sz / (float) ao->bps;
+
+#ifdef ESTIMATE_DELAY
+    // delay component: outstanding audio living in SDL
+    unsigned int callback_interval = callback_time0 - callback_time1;
+    unsigned int partial_interval = current_time - callback_time0;
+
+    // delay subcomponent: remaining audio from the currently played buffer
+    unsigned int buffer_interval = callback_interval - partial_interval;
+
+    // delay subcomponent: remaining audio from the next played buffer, as
+    // provided by the callback
+    buffer_interval += callback_interval;
+
+    // this one seems to be needed for SDL's internal buffering, may be wrong
+    // with some SDL outputs
+    buffer_interval += callback_interval;
+
+    delay += buffer_interval / 1000000.0;
+#endif
+
+    return delay;
 }
 
 const struct ao_driver audio_out_sdl = {
