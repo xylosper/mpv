@@ -49,6 +49,13 @@
 #include "config.h"
 #include "vo.h"
 
+// TODO: once SDL2 supports premultiplied alpha:
+// - remove the unpremultiply_* functions and their use
+// - remove opt_fixtrans
+// - wm4 has a function to convert LIBASS to RGBA format; this will quite
+//   likely outperform our own conversion, so we should then un-support the
+//   LIBASS format too and let sub code convert instead
+
 struct formatmap_entry {
     Uint32 sdl;
     unsigned int mpv;
@@ -832,7 +839,6 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
             target->color[2] = 255;
             target->alpha = 255;
             if (writepixels) {
-                // no conversion needed here yet
                 SDL_ConvertPixels(
                     b->w, b->h, SDL_PIXELFORMAT_ARGB8888,
                         b->bitmap, b->stride,

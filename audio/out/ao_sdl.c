@@ -158,7 +158,7 @@ static int init(struct ao *ao, char *params)
     }
 
     mp_msg(MSGT_AO, MSGL_V, "[sdl] obtained format: %d Hz, %d channels, %x, "
-           "buffer size: %d samples (%d bytes)\n",
+           "buffer size: %d samples\n",
            (int) obtained.freq, (int) obtained.channels,
            (int) obtained.format, (int) obtained.samples);
 
