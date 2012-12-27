@@ -45,16 +45,8 @@
 #include "video/vfcap.h"
 
 #include "aspect.h"
-#include "bitmap_packer.h"
 #include "config.h"
 #include "vo.h"
-
-// TODO: once SDL2 supports premultiplied alpha:
-// - remove the unpremultiply_* functions and their use
-// - remove opt_fixtrans
-// - wm4 has a function to convert LIBASS to RGBA format; this will quite
-//   likely outperform our own conversion, so we should then un-support the
-//   LIBASS format too and let sub code convert instead
 
 struct formatmap_entry {
     Uint32 sdl;
@@ -189,23 +181,18 @@ struct priv {
     struct osd_bitmap_surface {
         int bitmap_id;
         int bitmap_pos_id;
-        SDL_Texture *tex;
         struct osd_target {
             SDL_Rect source;
             SDL_Rect dest;
-            Uint8 color[3];
-            Uint8 alpha;
+            SDL_Texture *tex;
+            SDL_Texture *tex2;
         } *targets;
+        int num_targets;
         int targets_size;
-        int render_count;
-        struct bitmap_packer *packer;
     } osd_surfaces[MAX_OSD_PARTS];
     unsigned int mouse_timer;
     int mouse_hidden;
     int brightness, contrast;
-
-    // options
-    bool opt_fixtrans;
 };
 
 static bool is_good_renderer(int n, const char *driver_name_wanted)
@@ -238,11 +225,17 @@ static void destroy_renderer(struct vo *vo)
         vc->tex = NULL;
     }
 
-    int i;
+    int i, j;
     for (i = 0; i < MAX_OSD_PARTS; ++i) {
-        if (vc->osd_surfaces[i].tex) {
-            SDL_DestroyTexture(vc->osd_surfaces[i].tex);
-            vc->osd_surfaces[i].tex = NULL;
+        for (j = 0; j < vc->osd_surfaces[i].targets_size; ++j) {
+            if (vc->osd_surfaces[i].targets[j].tex) {
+                SDL_DestroyTexture(vc->osd_surfaces[i].targets[j].tex);
+                vc->osd_surfaces[i].targets[j].tex = NULL;
+            }
+            if (vc->osd_surfaces[i].targets[j].tex2) {
+                SDL_DestroyTexture(vc->osd_surfaces[i].targets[j].tex2);
+                vc->osd_surfaces[i].targets[j].tex2 = NULL;
+            }
         }
     }
 
@@ -569,148 +562,42 @@ static void uninit(struct vo *vo)
     talloc_free(vc);
 }
 
-static struct bitmap_packer *make_packer(struct vo *vo)
+static void subbitmap_to_texture(struct vo *vo, SDL_Texture *tex,
+                                 struct sub_bitmap *bmp,
+                                 uint32_t andmask, uint32_t ormask)
 {
     struct priv *vc = vo->priv;
 
-    struct bitmap_packer *packer = talloc_zero(vo, struct bitmap_packer);
-    packer->w_max = vc->renderer_info.max_texture_width ?
-        vc->renderer_info.max_texture_width : INT_MAX;
-    packer->h_max = vc->renderer_info.max_texture_height ?
-        vc->renderer_info.max_texture_height : INT_MAX;
-    return packer;
-}
+    char *pixels;
+    char *temppixels;
+    int pitch;
 
-static void unpremultiply_BGR32_alpha_msb(struct vo *vo,
-                                          unsigned char *out, int ostride,
-                                          const unsigned char *in, int istride,
-                                          int w, int h)
-{
-    struct priv *vc = vo->priv;
+    temppixels = talloc_size(vo, 4 * bmp->w * bmp->h);
+    pitch = 4 * bmp->w;
 
-    for (int y = 0; y < h; ++y) {
-        uint32_t *irow = (uint32_t *) &in[istride * y];
-        uint32_t *orow = (uint32_t *) &out[ostride * y];
-        for (int x = 0; x < w; ++x) {
-            uint32_t pval = irow[x];
-            uint8_t aval = (pval >> 24);
-            if (aval == 0) {
-                if (vc->opt_fixtrans) {
-                    // find neighbor with highest alpha
-                    int ymin = FFMAX(y - 1, 0);
-                    int ymax = FFMIN(y + 1, h - 1);
-                    int xmin = FFMAX(x - 1, 0);
-                    int xmax = FFMIN(x + 1, w - 1);
-                    uint32_t bestpval = 0;
-                    uint8_t bestaval = 0;
-                    for (int yn = ymin; yn <= ymax; ++yn) {
-                        uint32_t *inrow = (uint32_t *) &in[istride * yn];
-                        for (int xn = xmin; xn <= xmax; ++xn) {
-                            uint32_t pnval = inrow[xn];
-                            uint8_t anval = (pnval >> 24);
-                            if (anval > bestaval) {
-                                bestaval = anval;
-                                bestpval = pnval;
-                            }
-                        }
-                    }
-                    // use its color, but with zero alpha
-                    if (bestaval) {
-                        uint8_t rval = (bestpval >> 16) & 0xFF;
-                        uint8_t gval = (bestpval >> 8) & 0xFF;
-                        uint8_t bval = bestpval & 0xFF;
-                        int div = bestaval;
-                        int add = div / 2;
-                        rval = FFMIN(255, (rval * 255 + add) / div);
-                        gval = FFMIN(255, (gval * 255 + add) / div);
-                        bval = FFMIN(255, (bval * 255 + add) / div);
-                        orow[x] = bval + (gval << 8) + (rval << 16);
-                    } else {
-                        // all neighbors are zero, so it's ok to make this one
-                        // zero too
-                        orow[x] = 0;
-                    }
-                } else
-                    orow[x] = 0;
-            } else {
-                uint8_t rval = (pval >> 16) & 0xFF;
-                uint8_t gval = (pval >> 8) & 0xFF;
-                uint8_t bval = pval & 0xFF;
-                int div = aval;
-                int add = div / 2;
-                rval = FFMIN(255, (rval * 255 + add) / div);
-                gval = FFMIN(255, (gval * 255 + add) / div);
-                bval = FFMIN(255, (bval * 255 + add) / div);
-                orow[x] = bval + (gval << 8) + (rval << 16) + (aval << 24);
-            }
-        }
+    // apply pixel masks
+    int x, y;
+    for (y = 0; y < bmp->h; ++y) {
+        const uint32_t *src =
+            (const uint32_t *) ((const char *) bmp->bitmap + y * bmp->stride);
+        uint32_t *dst =
+            (uint32_t *) (temppixels + y * pitch);
+        for (x = 0; x < bmp->w; ++x)
+            dst[x] = (src[x] & andmask) | ormask;
     }
-}
 
-static void unpremultiply_BGR32_alpha_lsb(struct vo *vo,
-                                          unsigned char *out, int ostride,
-                                          const unsigned char *in, int istride,
-                                          int w, int h)
-{
-    struct priv *vc = vo->priv;
+    // convert to SDL's format
+    pixels = talloc_size(vo, 4 * bmp->w * bmp->h);
+    SDL_ConvertPixels(bmp->w, bmp->h, SDL_PIXELFORMAT_ARGB8888,
+                      temppixels, pitch,
+                      vc->osd_format.sdl,
+                      pixels, pitch);
 
-    for (int y = 0; y < h; ++y) {
-        uint32_t *irow = (uint32_t *) &in[istride * y];
-        uint32_t *orow = (uint32_t *) &out[ostride * y];
-        for (int x = 0; x < w; ++x) {
-            uint32_t pval = irow[x];
-            uint8_t aval = (pval & 0xFF);
-            if (aval == 0) {
-                if (vc->opt_fixtrans) {
-                    // find neighbor with highest alpha
-                    int ymin = FFMAX(y - 1, 0);
-                    int ymax = FFMIN(y + 1, h - 1);
-                    int xmin = FFMAX(x - 1, 0);
-                    int xmax = FFMIN(x + 1, w - 1);
-                    uint32_t bestpval = 0;
-                    uint8_t bestaval = 0;
-                    for (int yn = ymin; yn <= ymax; ++yn) {
-                        uint32_t *inrow = (uint32_t *) &in[istride * yn];
-                        for (int xn = xmin; xn <= xmax; ++xn) {
-                            uint32_t pnval = inrow[xn];
-                            uint8_t anval = (pnval & 0xFF);
-                            if (anval > bestaval) {
-                                bestaval = anval;
-                                bestpval = pnval;
-                            }
-                        }
-                    }
-                    // use its color, but with zero alpha
-                    if (bestaval) {
-                        uint8_t rval = (bestpval >> 8) & 0xFF;
-                        uint8_t gval = (bestpval >> 16) & 0xFF;
-                        uint8_t bval = (bestpval >> 24) & 0xFF;
-                        int div = bestaval;
-                        int add = div / 2;
-                        rval = FFMIN(255, (rval * 255 + add) / div);
-                        gval = FFMIN(255, (gval * 255 + add) / div);
-                        bval = FFMIN(255, (bval * 255 + add) / div);
-                        orow[x] = (bval << 24) + (gval << 16) + (rval << 8);
-                    } else {
-                        // all neighbors are zero, so it's ok to make this one
-                        // zero too
-                        orow[x] = 0;
-                    }
-                } else
-                    orow[x] = 0;
-            } else {
-                uint8_t rval = (pval >> 8) & 0xFF;
-                uint8_t gval = (pval >> 16) & 0xFF;
-                uint8_t bval = (pval >> 24) & 0xFF;
-                int div = aval;
-                int add = div / 2;
-                rval = FFMIN(255, (rval * 255 + add) / div);
-                gval = FFMIN(255, (gval * 255 + add) / div);
-                bval = FFMIN(255, (bval * 255 + add) / div);
-                orow[x] = (bval << 24) + (gval << 16) + (rval << 8) + aval;
-            }
-        }
-    }
+    // upload
+    SDL_UpdateTexture(tex, NULL, pixels, pitch);
+
+    talloc_free(pixels);
+    talloc_free(temppixels);
 }
 
 static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
@@ -721,152 +608,69 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
     if (imgs->format == SUBBITMAP_EMPTY || imgs->num_parts == 0)
         return;
 
-    if (imgs->bitmap_pos_id == sfc->bitmap_pos_id && sfc->tex)
-        return;  // Nothing changed and we still have the old data
+    if (imgs->bitmap_pos_id == sfc->bitmap_pos_id)
+        return;
 
-    sfc->render_count = 0;
-
-    unsigned char *surfpixels = NULL;
-    int surfpitch = 0;
-    unsigned char *writepixels = NULL;
-    // writepixels = what we write OSD bitmaps to
-    // surfpixels = the surface's pixels
-    // normally these two are equal; if they are not, we need to fix
-    // premultiplied alpha
-
-    if (imgs->bitmap_id != sfc->bitmap_id || !sfc->tex) {
-        if (!sfc->packer)
-            sfc->packer = make_packer(vo);
-        sfc->packer->padding =
-            imgs->format == SUBBITMAP_RGBA ? 2 : // for unpremultiplying alpha
-            imgs->scaled ? 1 : // for bilinear filtering
-            0;
-        int r = packer_pack_from_subbitmaps(sfc->packer, imgs);
-        if (r < 0) {
-            mp_msg(MSGT_VO, MSGL_ERR, "[sdl] OSD bitmaps do not fit on "
-                   "a surface with the maximum supported size\n");
-            return;
-        } else if (r || !sfc->tex) {
-            if (sfc->tex)
-                SDL_DestroyTexture(sfc->tex);
-            sfc->tex = NULL;
-            mp_msg(MSGT_VO, MSGL_V, "[sdl] Allocating a %dx%d surface for "
-                   "OSD bitmaps.\n", sfc->packer->w, sfc->packer->h);
-
-            sfc->tex = SDL_CreateTexture(vc->renderer, vc->osd_format.sdl,
-                                         SDL_TEXTUREACCESS_STREAMING,
-                                         sfc->packer->w, sfc->packer->h);
-            if (!sfc->tex) {
-                mp_msg(MSGT_VO, MSGL_ERR, "[sdl] Could not create texture\n");
-                return;
-            }
-
-            SDL_SetTextureBlendMode(sfc->tex, SDL_BLENDMODE_BLEND);
-        }
-
-        if (SDL_LockTexture(sfc->tex, NULL,
-                            (void **) &surfpixels, &surfpitch)) {
-            mp_msg(MSGT_VO, MSGL_ERR, "[sdl] SDL_LockTexture failed\n");
-            return;
-        }
-
-        // possibly allocate a temporary buffer for unpremultiplying
-        size_t sz = surfpitch * (sfc->packer->h - 1) + 4 * sfc->packer->w;
-        if (imgs->format == SUBBITMAP_RGBA) {
-            // note: only in this case is writepixels != surfpixels!
-            writepixels = talloc_size(vc, sz);
-        } else
-            writepixels = surfpixels;
-
-        // zero surface if we need padding
-        if (sfc->packer->padding) {
-            if (imgs->format == SUBBITMAP_LIBASS) {
-                for (int i = 0; i < sfc->packer->h; ++i) {
-                    uint32_t *row = (uint32_t *) (writepixels + surfpitch * i);
-                    for (int j = 0; j < sfc->packer->w; ++j)
-                        row[j] = 0x00FFFFFF;
-                        // we need to fill this type with 0x00FFFFFF!
-                        // to prevent bilinear filtering issues
-                }
-            } else
-                memset(writepixels, 0, sz);
-        }
-
-        if (sfc->packer->count > sfc->targets_size) {
-            talloc_free(sfc->targets);
-            sfc->targets_size = sfc->packer->count;
-            sfc->targets = talloc_size(vc, sfc->targets_size *
-                                       sizeof(*sfc->targets));
-        }
+    if (imgs->num_parts > sfc->targets_size) {
+        sfc->targets = talloc_realloc(vc, sfc->targets,
+                                      struct osd_target, imgs->num_parts);
+        memset(&sfc->targets[sfc->targets_size], 0, sizeof(struct osd_target) *
+               (imgs->num_parts - sfc->targets_size));
+        sfc->targets_size = imgs->num_parts;
     }
+    sfc->num_targets = imgs->num_parts;
 
-    for (int i = 0; i < sfc->packer->count; i++) {
-        struct sub_bitmap *b = &imgs->parts[i];
-        struct osd_target *target = sfc->targets + sfc->render_count;
-        int x = sfc->packer->result[i].x;
-        int y = sfc->packer->result[i].y;
+    for (int i = 0; i < imgs->num_parts; i++) {
+        struct osd_target *target = sfc->targets + i;
+        struct sub_bitmap *bmp = imgs->parts + i;
+
         target->source = (SDL_Rect){
-            x, y, b->w, b->h
+            0, 0, bmp->w, bmp->h
         };
         target->dest = (SDL_Rect){
-            b->x, b->y, b->dw, b->dh
+            bmp->x, bmp->y, bmp->dw, bmp->dh
         };
-        switch (imgs->format) {
-        case SUBBITMAP_LIBASS:
-            target->color[0] = ((b->libass.color >> 24) & 0xff);
-            target->color[1] = ((b->libass.color >> 16) & 0xff);
-            target->color[2] = ((b->libass.color >>  8) & 0xff);
-            target->alpha = 255 - ((b->libass.color >> 0) & 0xff);
-            if (writepixels) {
-                // damn SDL has no support for 8bit gray...
-                // idea: could instead hand craft a SDL_Surface with palette
-                size_t n = (b->h - 1) * b->stride + b->w, i;
-                uint32_t *bmp = talloc_size(vc, n * 4);
-                for (i = 0; i < n; ++i)
-                    bmp[i] = 0x00FFFFFF |
-                             ((((uint8_t *) b->bitmap)[i]) << 24);
-                SDL_ConvertPixels(
-                    b->w, b->h, SDL_PIXELFORMAT_ARGB8888,
-                        bmp, b->stride * 4,
-                    vc->osd_format.sdl,
-                        writepixels + x * 4 + y * surfpitch, surfpitch);
-                talloc_free(bmp);
-            }
-            break;
-        case SUBBITMAP_RGBA:
-            target->color[0] = 255;
-            target->color[1] = 255;
-            target->color[2] = 255;
-            target->alpha = 255;
-            if (writepixels) {
-                SDL_ConvertPixels(
-                    b->w, b->h, SDL_PIXELFORMAT_ARGB8888,
-                        b->bitmap, b->stride,
-                    vc->osd_format.sdl,
-                        writepixels + x * 4 + y * surfpitch, surfpitch);
-            }
-            break;
-        }
-        sfc->render_count++;
-    }
 
-    if (surfpixels != writepixels) {
-        if (vc->osd_format.rgba_alpha_lsb) {
-            unpremultiply_BGR32_alpha_lsb(vo,
-                                          surfpixels, surfpitch,
-                                          writepixels, surfpitch,
-                                          sfc->packer->w, sfc->packer->h);
-        } else {
-            unpremultiply_BGR32_alpha_msb(vo,
-                                          surfpixels, surfpitch,
-                                          writepixels, surfpitch,
-                                          sfc->packer->w, sfc->packer->h);
-        }
-        talloc_free(writepixels);
-    }
+        if (imgs->bitmap_id != sfc->bitmap_id || !target->tex) {
+            // tex: alpha blended texture
+            if (target->tex) {
+                SDL_DestroyTexture(target->tex);
+                target->tex = NULL;
+            }
+            if (!target->tex)
+                target->tex = SDL_CreateTexture(vc->renderer,
+                        vc->osd_format.sdl, SDL_TEXTUREACCESS_STATIC,
+                        bmp->w, bmp->h);
+            if (!target->tex) {
+                mp_msg(MSGT_VO, MSGL_ERR, "[sdl] Could not create texture\n");
+            }
+            if (target->tex) {
+                SDL_SetTextureBlendMode(target->tex,
+                                        SDL_BLENDMODE_BLEND);
+                subbitmap_to_texture(vo, target->tex, bmp,
+                                     0xFF000000, 0x00000000);
+            }
 
-    if (surfpixels)
-        SDL_UnlockTexture (sfc->tex);
+            // tex2: added texture
+            if (target->tex2) {
+                SDL_DestroyTexture(target->tex2);
+                target->tex2 = NULL;
+            }
+            if (!target->tex2)
+                target->tex2 = SDL_CreateTexture(vc->renderer,
+                        vc->osd_format.sdl, SDL_TEXTUREACCESS_STATIC,
+                        bmp->w, bmp->h);
+            if (!target->tex2) {
+                mp_msg(MSGT_VO, MSGL_ERR, "[sdl] Could not create texture\n");
+            }
+            if (target->tex2) {
+                SDL_SetTextureBlendMode(target->tex2,
+                                        SDL_BLENDMODE_ADD);
+                subbitmap_to_texture(vo, target->tex2, bmp,
+                                     0x00FFFFFF, 0xFF000000);
+            }
+        }
+    }
 
     sfc->bitmap_id = imgs->bitmap_id;
     sfc->bitmap_pos_id = imgs->bitmap_pos_id;
@@ -878,14 +682,14 @@ static void draw_osd_part(struct vo *vo, int index)
     struct osd_bitmap_surface *sfc = &vc->osd_surfaces[index];
     int i;
 
-    for (i = 0; i < sfc->render_count; i++) {
+    for (i = 0; i < sfc->num_targets; i++) {
         struct osd_target *target = sfc->targets + i;
-        SDL_SetTextureAlphaMod(sfc->tex, sfc->targets[i].alpha);
-        SDL_SetTextureColorMod(sfc->tex,
-                               sfc->targets[i].color[0],
-                               sfc->targets[i].color[1],
-                               sfc->targets[i].color[2]);
-        SDL_RenderCopy(vc->renderer, sfc->tex, &target->source, &target->dest);
+        if (target->tex)
+            SDL_RenderCopy(vc->renderer, target->tex,
+                           &target->source, &target->dest);
+        if (target->tex2)
+            SDL_RenderCopy(vc->renderer, target->tex2,
+                           &target->source, &target->dest);
     }
 }
 
@@ -901,7 +705,6 @@ static void draw_osd(struct vo *vo, struct osd_state *osd)
     struct priv *vc = vo->priv;
 
     static const bool formats[SUBBITMAP_COUNT] = {
-        [SUBBITMAP_LIBASS] = true,
         [SUBBITMAP_RGBA] = true,
     };
 
@@ -1194,13 +997,6 @@ const struct vo_driver video_out_sdl = {
         ""
     },
     .priv_size = sizeof(struct priv),
-    .priv_defaults = &(const struct priv) {
-        .opt_fixtrans = true,
-    },
-    .options = (const struct m_option[]) {
-        OPT_MAKE_FLAGS("fixtrans", opt_fixtrans, 0),
-        {0},
-    },
     .preinit = preinit,
     .config = config,
     .control = control,
