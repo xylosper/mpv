@@ -95,7 +95,7 @@ dsound (Windows only)
 sdl
     SDL 1.2+ audio output driver. Should work everywhere where SDL 1.2 builds,
     but may require the SDL_AUDIODRIVER environment variable to be set
-    appropriately to your system.
+    appropriately for your system.
 
     buflen=<length>
         Sets the audio buffer length in seconds. Is used only approximately,
