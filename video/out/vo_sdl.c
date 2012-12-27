@@ -51,46 +51,46 @@
 struct formatmap_entry {
     Uint32 sdl;
     unsigned int mpv;
-    int rgba_alpha_lsb;
+    int is_rgba;
 };
 const struct formatmap_entry formats[] = {
-    {SDL_PIXELFORMAT_YV12, IMGFMT_YV12, -1},
-    {SDL_PIXELFORMAT_IYUV, IMGFMT_IYUV, -1},
-    {SDL_PIXELFORMAT_YUY2, IMGFMT_YUY2, -1},
-    {SDL_PIXELFORMAT_UYVY, IMGFMT_UYVY, -1},
-    {SDL_PIXELFORMAT_YVYU, IMGFMT_YVYU, -1},
+    {SDL_PIXELFORMAT_YV12, IMGFMT_YV12, 0},
+    {SDL_PIXELFORMAT_IYUV, IMGFMT_IYUV, 0},
+    {SDL_PIXELFORMAT_YUY2, IMGFMT_YUY2, 0},
+    {SDL_PIXELFORMAT_UYVY, IMGFMT_UYVY, 0},
+    {SDL_PIXELFORMAT_YVYU, IMGFMT_YVYU, 0},
 #if BYTE_ORDER == BIG_ENDIAN
-    {SDL_PIXELFORMAT_RGBX8888, IMGFMT_RGBA, 1},
-    {SDL_PIXELFORMAT_BGRX8888, IMGFMT_BGRA, 1},
-    {SDL_PIXELFORMAT_ARGB8888, IMGFMT_ARGB, 0},
+    {SDL_PIXELFORMAT_RGBX8888, IMGFMT_RGBA, 0}, // has no alpha -> bad for OSD
+    {SDL_PIXELFORMAT_BGRX8888, IMGFMT_BGRA, 0}, // has no alpha -> bad for OSD
+    {SDL_PIXELFORMAT_ARGB8888, IMGFMT_ARGB, 1},
     {SDL_PIXELFORMAT_RGBA8888, IMGFMT_RGBA, 1},
-    {SDL_PIXELFORMAT_ABGR8888, IMGFMT_ABGR, 0},
+    {SDL_PIXELFORMAT_ABGR8888, IMGFMT_ABGR, 1},
     {SDL_PIXELFORMAT_BGRA8888, IMGFMT_BGRA, 1},
-    {SDL_PIXELFORMAT_RGB24, IMGFMT_RGB24, -1},
-    {SDL_PIXELFORMAT_BGR24, IMGFMT_BGR24, -1},
-    {SDL_PIXELFORMAT_RGB888, IMGFMT_RGB24, -1},
-    {SDL_PIXELFORMAT_BGR888, IMGFMT_BGR24, -1},
-    {SDL_PIXELFORMAT_RGB565, IMGFMT_RGB16, -1},
-    {SDL_PIXELFORMAT_BGR565, IMGFMT_BGR16, -1},
-    {SDL_PIXELFORMAT_RGB555, IMGFMT_RGB15, -1},
-    {SDL_PIXELFORMAT_BGR555, IMGFMT_BGR15, -1},
-    {SDL_PIXELFORMAT_RGB444, IMGFMT_RGB12, -1}
+    {SDL_PIXELFORMAT_RGB24, IMGFMT_RGB24, 0},
+    {SDL_PIXELFORMAT_BGR24, IMGFMT_BGR24, 0},
+    {SDL_PIXELFORMAT_RGB888, IMGFMT_RGB24, 0},
+    {SDL_PIXELFORMAT_BGR888, IMGFMT_BGR24, 0},
+    {SDL_PIXELFORMAT_RGB565, IMGFMT_RGB16, 0},
+    {SDL_PIXELFORMAT_BGR565, IMGFMT_BGR16, 0},
+    {SDL_PIXELFORMAT_RGB555, IMGFMT_RGB15, 0},
+    {SDL_PIXELFORMAT_BGR555, IMGFMT_BGR15, 0},
+    {SDL_PIXELFORMAT_RGB444, IMGFMT_RGB12, 0}
 #else
-    {SDL_PIXELFORMAT_RGBX8888, IMGFMT_ABGR, 1},
-    {SDL_PIXELFORMAT_BGRX8888, IMGFMT_ARGB, 1},
-    {SDL_PIXELFORMAT_ARGB8888, IMGFMT_BGRA, 0},
+    {SDL_PIXELFORMAT_RGBX8888, IMGFMT_ABGR, 0}, // has no alpha -> bad for OSD
+    {SDL_PIXELFORMAT_BGRX8888, IMGFMT_ARGB, 0}, // has no alpha -> bad for OSD
+    {SDL_PIXELFORMAT_ARGB8888, IMGFMT_BGRA, 1},
     {SDL_PIXELFORMAT_RGBA8888, IMGFMT_ABGR, 1},
-    {SDL_PIXELFORMAT_ABGR8888, IMGFMT_RGBA, 0},
+    {SDL_PIXELFORMAT_ABGR8888, IMGFMT_RGBA, 1},
     {SDL_PIXELFORMAT_BGRA8888, IMGFMT_ARGB, 1},
-    {SDL_PIXELFORMAT_RGB24, IMGFMT_RGB24, -1},
-    {SDL_PIXELFORMAT_BGR24, IMGFMT_BGR24, -1},
-    {SDL_PIXELFORMAT_RGB888, IMGFMT_BGR24, -1},
-    {SDL_PIXELFORMAT_BGR888, IMGFMT_RGB24, -1},
-    {SDL_PIXELFORMAT_RGB565, IMGFMT_BGR16, -1},
-    {SDL_PIXELFORMAT_BGR565, IMGFMT_RGB16, -1},
-    {SDL_PIXELFORMAT_RGB555, IMGFMT_BGR15, -1},
-    {SDL_PIXELFORMAT_BGR555, IMGFMT_RGB15, -1},
-    {SDL_PIXELFORMAT_RGB444, IMGFMT_BGR12, -1}
+    {SDL_PIXELFORMAT_RGB24, IMGFMT_RGB24, 0},
+    {SDL_PIXELFORMAT_BGR24, IMGFMT_BGR24, 0},
+    {SDL_PIXELFORMAT_RGB888, IMGFMT_BGR24, 0},
+    {SDL_PIXELFORMAT_BGR888, IMGFMT_RGB24, 0},
+    {SDL_PIXELFORMAT_RGB565, IMGFMT_BGR16, 0},
+    {SDL_PIXELFORMAT_BGR565, IMGFMT_RGB16, 0},
+    {SDL_PIXELFORMAT_RGB555, IMGFMT_BGR15, 0},
+    {SDL_PIXELFORMAT_BGR555, IMGFMT_RGB15, 0},
+    {SDL_PIXELFORMAT_RGB444, IMGFMT_BGR12, 0}
 #endif
 };
 
@@ -209,7 +209,7 @@ static bool is_good_renderer(int n, const char *driver_name_wanted)
     for (i = 0; i < ri.num_texture_formats; ++i)
         for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
             if (ri.texture_formats[i] == formats[j].sdl)
-                if (formats[j].rgba_alpha_lsb >= 0)
+                if (formats[j].is_rgba)
                     return true;
 
     return false;
@@ -299,7 +299,7 @@ static int init_renderer(struct vo *vo, int w, int h)
     for (i = 0; i < vc->renderer_info.num_texture_formats; ++i)
         for (j = 0; j < sizeof(formats) / sizeof(formats[0]); ++j)
             if (vc->renderer_info.texture_formats[i] == formats[j].sdl)
-                if (formats[j].rgba_alpha_lsb >= 0)
+                if (formats[j].is_rgba)
                     vc->osd_format = formats[j];
 
     return 0;
