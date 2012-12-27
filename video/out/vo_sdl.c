@@ -568,35 +568,32 @@ static void subbitmap_to_texture(struct vo *vo, SDL_Texture *tex,
 {
     struct priv *vc = vo->priv;
 
-    char *pixels;
-    char *temppixels;
-    int pitch;
-
-    temppixels = talloc_size(vo, 4 * bmp->w * bmp->h);
-    pitch = 4 * bmp->w;
+    uint32_t *temppixels;
+    temppixels = talloc_array(vo, uint32_t, bmp->w * bmp->h);
 
     // apply pixel masks
     int x, y;
     for (y = 0; y < bmp->h; ++y) {
         const uint32_t *src =
             (const uint32_t *) ((const char *) bmp->bitmap + y * bmp->stride);
-        uint32_t *dst =
-            (uint32_t *) (temppixels + y * pitch);
+        uint32_t *dst = temppixels + y * bmp->w;
         for (x = 0; x < bmp->w; ++x)
             dst[x] = (src[x] & andmask) | ormask;
     }
 
-    // convert to SDL's format
-    pixels = talloc_size(vo, 4 * bmp->w * bmp->h);
-    SDL_ConvertPixels(bmp->w, bmp->h, SDL_PIXELFORMAT_ARGB8888,
-                      temppixels, pitch,
-                      vc->osd_format.sdl,
-                      pixels, pitch);
+    // convert to SDL's format and upload
+    void *pixels;
+    int pitch;
+    if (SDL_LockTexture(tex, NULL, &pixels, &pitch)) {
+        mp_msg(MSGT_VO, MSGL_ERR, "[sdl] Could not lock texture\n");
+    } else {
+        SDL_ConvertPixels(bmp->w, bmp->h, SDL_PIXELFORMAT_ARGB8888,
+                          temppixels, sizeof(uint32_t) * bmp->w,
+                          vc->osd_format.sdl,
+                          pixels, pitch);
+        SDL_UnlockTexture(tex);
+    }
 
-    // upload
-    SDL_UpdateTexture(tex, NULL, pixels, pitch);
-
-    talloc_free(pixels);
     talloc_free(temppixels);
 }
 
@@ -639,7 +636,7 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
             }
             if (!target->tex)
                 target->tex = SDL_CreateTexture(vc->renderer,
-                        vc->osd_format.sdl, SDL_TEXTUREACCESS_STATIC,
+                        vc->osd_format.sdl, SDL_TEXTUREACCESS_STREAMING,
                         bmp->w, bmp->h);
             if (!target->tex) {
                 mp_msg(MSGT_VO, MSGL_ERR, "[sdl] Could not create texture\n");
@@ -658,7 +655,7 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
             }
             if (!target->tex2)
                 target->tex2 = SDL_CreateTexture(vc->renderer,
-                        vc->osd_format.sdl, SDL_TEXTUREACCESS_STATIC,
+                        vc->osd_format.sdl, SDL_TEXTUREACCESS_STREAMING,
                         bmp->w, bmp->h);
             if (!target->tex2) {
                 mp_msg(MSGT_VO, MSGL_ERR, "[sdl] Could not create texture\n");
