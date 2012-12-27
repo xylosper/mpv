@@ -24,6 +24,7 @@
 #include "talloc.h"
 #include "ao.h"
 #include "core/mp_msg.h"
+#include "core/subopt-helper.h"
 #include "osdep/timer.h"
 
 #include <libavutil/fifo.h>
@@ -31,9 +32,6 @@
 
 // hack because SDL can't be asked about the current delay
 #define ESTIMATE_DELAY
-
-//! number of "virtual" chunks our buffer consists of
-#define NUM_CHUNKS 4
 
 struct priv
 {
@@ -60,7 +58,7 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
     priv->callback_time0 = GetTimer();
 #endif
 
-    while (len && !priv->paused) {
+    while (len > 0 && !priv->paused) {
         int got = av_fifo_size(priv->buffer);
         if (got > len)
             got = len;
@@ -120,10 +118,34 @@ static unsigned int ceil_power_of_two(unsigned int x)
     return y;
 }
 
+static void print_help(void) {
+  mp_msg(MSGT_AO, MSGL_FATAL,
+          "\n-ao sdl commandline help:\n"
+          "Example: mpv -ao sdl:buflen=len\n"
+          "\nOptions:\n"
+          "   buflen=len\n"
+          "      Length of audio buffer in seconds\n"
+          "   bufcnt=cnt\n"
+          "      Count of extra audio buffers\n"
+        );
+}
+
 static int init(struct ao *ao, char *params)
 {
     if (SDL_WasInit(SDL_INIT_AUDIO)) {
         mp_msg(MSGT_AO, MSGL_ERR, "[sdl] already initialized\n");
+        return -1;
+    }
+
+    float buflen = 0.02;
+    float bufcnt = 2;
+    const opt_t subopts[] = {
+        {"buflen", OPT_ARG_FLOAT, &buflen, NULL},
+        {"bufcnt", OPT_ARG_FLOAT, &bufcnt, NULL},
+        {NULL}
+    };
+    if (subopt_parse(params, subopts) != 0) {
+        print_help();
         return -1;
     }
 
@@ -132,6 +154,7 @@ static int init(struct ao *ao, char *params)
 
     if (SDL_InitSubSystem(SDL_INIT_AUDIO)) {
         mp_msg(MSGT_AO, MSGL_ERR, "[sdl] SDL_Init failed\n");
+        uninit(ao, true);
         return -1;
     }
 
@@ -161,8 +184,7 @@ static int init(struct ao *ao, char *params)
     }
     desired.freq = ao->samplerate;
     desired.channels = ao->channels;
-    desired.samples = ceil_power_of_two(ao->samplerate / 50);
-        // 20ms to 40ms buffer should be ok
+    desired.samples = FFMIN(32768, ceil_power_of_two(ao->samplerate * buflen));
     desired.callback = audio_callback;
     desired.userdata = ao;
 
@@ -212,7 +234,7 @@ static int init(struct ao *ao, char *params)
     ao->samplerate = obtained.freq;
     ao->channels = obtained.channels;
     ao->bps = ao->channels * ao->samplerate * bytes;
-    ao->buffersize = obtained.size * NUM_CHUNKS;
+    ao->buffersize = obtained.size * bufcnt;
     ao->outburst = obtained.size;
     priv->buffer = av_fifo_alloc(ao->buffersize);
     priv->buffer_mutex = SDL_CreateMutex();
@@ -326,10 +348,6 @@ static float get_delay(struct ao *ao)
 
     // delay subcomponent: remaining audio from the next played buffer, as
     // provided by the callback
-    buffer_interval += callback_interval;
-
-    // this one seems to be needed for SDL's internal buffering, may be wrong
-    // with some SDL outputs
     buffer_interval += callback_interval;
 
     delay += buffer_interval / 1000000.0;
