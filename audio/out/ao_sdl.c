@@ -137,7 +137,7 @@ static int init(struct ao *ao, char *params)
         return -1;
     }
 
-    float buflen = 0.02;
+    float buflen = 0; // use SDL default
     float bufcnt = 2;
     const opt_t subopts[] = {
         {"buflen", OPT_ARG_FLOAT, &buflen, NULL},
