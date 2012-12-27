@@ -153,7 +153,8 @@ static int init(struct ao *ao, char *params)
     ao->priv = priv;
 
     if (SDL_InitSubSystem(SDL_INIT_AUDIO)) {
-        mp_msg(MSGT_AO, MSGL_ERR, "[sdl] SDL_Init failed\n");
+        if (!ao->probing)
+            mp_msg(MSGT_AO, MSGL_ERR, "[sdl] SDL_Init failed\n");
         uninit(ao, true);
         return -1;
     }
@@ -195,8 +196,9 @@ static int init(struct ao *ao, char *params)
 
     obtained = desired;
     if (SDL_OpenAudio(&desired, &obtained)) {
-        mp_msg(MSGT_AO, MSGL_ERR, "[sdl] could not open audio: %s\n",
-            SDL_GetError());
+        if (!ao->probing)
+            mp_msg(MSGT_AO, MSGL_ERR, "[sdl] could not open audio: %s\n",
+                SDL_GetError());
         uninit(ao, true);
         return -1;
     }
@@ -226,9 +228,11 @@ static int init(struct ao *ao, char *params)
         case AUDIO_F32MSB: ao->format = AF_FORMAT_FLOAT_BE; bytes = 4; break;
 #endif
         default:
-           mp_msg(MSGT_AO, MSGL_ERR, "[sdl] could not find matching format\n");
-           uninit(ao, true);
-           return -1;
+            if (!ao->probing)
+                mp_msg(MSGT_AO, MSGL_ERR,
+                       "[sdl] could not find matching format\n");
+            uninit(ao, true);
+            return -1;
     }
 
     ao->samplerate = obtained.freq;
