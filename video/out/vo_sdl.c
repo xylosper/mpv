@@ -648,7 +648,7 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
                 SDL_SetTextureBlendMode(target->tex,
                                         SDL_BLENDMODE_BLEND);
                 subbitmap_to_texture(vo, target->tex, bmp,
-                                     0xFF000000, 0x00000000);
+                                     0xFF000000, 0x00000000); // RGBA -> 000A
             }
 
             // tex2: added texture
@@ -667,7 +667,7 @@ static void generate_osd_part(struct vo *vo, struct sub_bitmaps *imgs)
                 SDL_SetTextureBlendMode(target->tex2,
                                         SDL_BLENDMODE_ADD);
                 subbitmap_to_texture(vo, target->tex2, bmp,
-                                     0x00FFFFFF, 0xFF000000);
+                                     0x00FFFFFF, 0xFF000000); // RGBA -> RGB1
             }
         }
     }
