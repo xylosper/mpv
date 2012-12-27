@@ -660,14 +660,9 @@ opengl-old
         x11
             X11/GLX
 
-sdl2
-    SDL2 video output driver, depending on system with or without hardware
-    acceleration. Should work everywhere where SDL2 builds.
-
-    (no-)fixtrans
-        Fix "halos" around transparent bitmap subtitle objects by setting the
-        color value of fully transparent pixels to the one of a non-transparent
-        pixel nearby (slow, but enabled by default).
+sdl
+    SDL 2.0 Render video output driver, depending on system with or without
+    hardware acceleration. Should work everywhere where SDL 2.0 builds.
 
 null
     Produces no video output. Useful for benchmarking.
