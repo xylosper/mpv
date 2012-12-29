@@ -435,7 +435,7 @@ static void flip_page(struct vo *vo)
     SDL_RenderPresent(vc->renderer);
 }
 
-static void check_events(struct vo *vo)
+static void wait_events(struct vo *vo, int wait_ms, int wait_w, int wait_h)
 {
     struct priv *vc = vo->priv;
     struct MPOpts *opts = vo->opts;
@@ -459,7 +459,11 @@ static void check_events(struct vo *vo)
         }
     }
 
-    while (SDL_PollEvent(&ev)) {
+    SDL_PumpEvents();
+
+    for (;;) {
+        if (!SDL_PollEvent(&ev))
+            return;
         switch (ev.type) {
         case SDL_WINDOWEVENT:
             switch (ev.window.event) {
@@ -550,6 +554,11 @@ static void check_events(struct vo *vo)
             break;
         }
     }
+}
+
+static void check_events(struct vo *vo)
+{
+    wait_events(vo, 0, -1, -1);
 }
 
 static void uninit(struct vo *vo)
