@@ -413,10 +413,12 @@ static void flip_page(struct vo *vo)
 
     /* remember the currently visible buffer */
     ctx->visible_buf = ctx->current_buf;
-
     ctx->current_buf = (ctx->current_buf + 1) % ctx->num_buffers;
-    XFlush(vo->x11->display);
-    return;
+
+#ifdef HAVE_SHM
+    if (!ctx->Shmem_Flag)
+#endif
+        XSync(vo->x11->display, False);
 }
 
 static int draw_slice(struct vo *vo, uint8_t *image[], int stride[], int w,
