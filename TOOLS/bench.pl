@@ -1,12 +1,14 @@
 use strict;
 use warnings;
 use Time::HiRes;
+use IPC::Open3;
 
 sub CPUINFO { `cat /proc/cpuinfo`; }
 my $CPUINFO_ATTEMPTS = 4;
 my $CPUINFO_WAIT = 30;
 my $OUT_FILE = "bench.tsv";
 my $CMDLINE = "../mpv -no-audio -no-vsync -untimed -end 10 bench.mp4";
+my $CMDLINE_ERROR_PATTERN = qr/Video: no video/;
 my $RUNS = 5;
 my $RETRIES = 5;
 my @COMBINATIONS = (
@@ -16,6 +18,9 @@ my @COMBINATIONS = (
             ? "--fs --geometry=$1" : "--fs"),
     ],
     [VO =>
+        "--vo=direct3d_shaders",
+        "--vo=direct3d",
+        "--vo=corevideo",
         "--vo=vdpau",
         "--vo=vdpau:fps=-1",
         "--vo=xv",
@@ -28,7 +33,9 @@ my @COMBINATIONS = (
             {SDL_RENDER_DRIVER => "opengl", SDL_RENDER_OPENGL_SHADERS => 0}],
         ["--vo=sdl", {SDL_RENDER_DRIVER => "software"}],
         "--vo=x11",
+        "--vo=caca",
         "--vo=opengl-hq:sw",
+        "--vo=null",
     ],
     [OSD =>
         "--osd-level=0",
@@ -72,29 +79,53 @@ sub run($$) {
     }
     # wait for CPU to have the right state
     wait_cpuinfo();
+    print STDERR "Running $cmdline... ";
     my $t0 = Time::HiRes::time();
-    my $ret = system $cmdline;
+    my $pid = IPC::Open3::open3 \*STDIN, my $cmdfh, undef, $cmdline;
+    my $str = do {
+        undef local $/;
+        <$cmdfh>;
+    };
+    close $cmdfh;
+    waitpid $pid, 0;
+    my $ret = $?;
     my $t1 = Time::HiRes::time();
     for (keys %$env) {
         delete $ENV{$_};
     }
     if (($ret & 127) == 2) {
-        print STDERR "Test failed due to SIGINT, bailing out\n";
+        print STDERR "failed due to SIGINT, bailing out\n";
         exit;
     }
     if (!wait_cpuinfo()) {
-        print STDERR "Test failed due to CPU frequency change\n";
+        print STDERR "failed due to CPU frequency change\n";
         return undef;
     }
-    if ($ret != 0) {
-        print STDERR "Test failed due to non-zero exit code\n";
+    if ($ret != 0 || $str =~ $CMDLINE_ERROR_PATTERN) {
+        print STDERR "failed due to non-zero exit code\n";
         return undef;
     }
+    my $dt = $t1 - $t0;
+    print STDERR "$dt\n";
     return $t1 - $t0;
 }
 
-my %choice_totals = ();
+my %choices_working = ();
+my %choice_results = ();
 my @totals = ();
+
+sub decode_choice($) {
+    my ($x) = @_;
+    if (ref $x) {
+        my $c = $x->[0];
+        my $e = $x->[1];
+        my $str = $c . " " .
+                  join " ", map { "$_=$e->{$_}" } sort keys %$e;
+        return $str, $c, $e;
+    } else {
+        return $x, $x, {};
+    }
+}
 
 my $is_first = 1;
 sub output($$) {
@@ -119,15 +150,46 @@ sub output($$) {
         print $outfh "FAILED\n";
     }
 
-    # record totals
-    for(@$choices) {
-        push @{$choice_totals{$_->[0]}{$_->[1]}}, $time;
+    # record results
+    my $start = \%choice_results;
+    my $ptr = \$start;
+    for (@$choices) {
+        my $key = $_->[0];
+        my ($str, undef) = decode_choice $_->[1];
+        $choices_working{$key}{$str} = 1
+            if defined $time;
+        $$ptr ||= {};
+        $ptr = \($$ptr->{$str});
     }
-    push @totals, $time;
+    push @$$ptr, $time;
 }
 
-sub get_total(@)
-{
+sub collect_total($$$$);
+sub collect_total($$$$) {
+    my ($item, $ptr, $searchkey, $searchvalue) = @_;
+    my $list = $COMBINATIONS[$item];
+    if ($list) {
+        my ($key, @values) = @$list;
+        my @found = ();
+        for (@values) {
+            my ($str, undef) = decode_choice $_;
+            if (defined $searchkey and $searchkey eq $key) {
+                if ($str ne $searchvalue) {
+                    next;
+                }
+            }
+            next
+                unless $choices_working{$key}{$str};
+            push @found, collect_total($item + 1,
+                $ptr->{$str}, $searchkey, $searchvalue);
+        }
+        return @found;
+    } else {
+        return @$ptr;
+    }
+}
+
+sub get_total(@) {
     return undef
         unless @_;
     my $sum = 0;
@@ -139,16 +201,16 @@ sub get_total(@)
     return $sum / @_;
 }
 
-sub output_totals()
-{
-    for my $key(sort keys %choice_totals) {
-        for my $value(sort keys %{$choice_totals{$key}}) {
-            my @l = @{$choice_totals{$key}{$value}};
+sub output_totals() {
+    for my $key(sort keys %choices_working) {
+        for my $value(sort keys %{$choices_working{$key}}) {
+            my @l = collect_total 0, \%choice_results, $key, $value;
             my $avg = get_total @l;
             my $avg_str = defined($avg) ? sprintf("%.6f", $avg) : "FAILED";
             printf "%10s: %10s for %s\n", $key, $avg_str, $value;
         }
     }
+    my @totals = collect_total 0, \%choice_results, undef, undef;
     my $avg = get_total @totals;
     my $avg_str = defined($avg) ? sprintf("%.6f", $avg) : "FAILED";
     printf "%10s: %10s\n", "AVERAGE", $avg_str;
@@ -161,21 +223,11 @@ sub recurse($$$$) {
     if ($list) {
         my ($key, @values) = @$list;
         for (@values) {
-            if (ref $_) {
-                my $c = $_->[0];
-                my $e = $_->[1];
-                my $str = $c . " " .
-                          join " ", map { "$_=$e->{$_}" } sort keys %$e;
-                recurse $item + 1,
-                    [@$choices, [$key => $str]],
-                    "$cmdline $c",
-                    {%$env, %$e};
-            } else {
-                recurse $item + 1,
-                    [@$choices, [$key => $_]],
-                    "$cmdline $_",
-                    $env;
-            }
+            my ($str, $c, $e) = decode_choice $_;
+            recurse $item + 1,
+                [@$choices, [$key => $str]],
+                "$cmdline $c",
+                {%$env, %$e};
         }
     } else {
         # do a run!
