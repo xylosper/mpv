@@ -16,6 +16,7 @@ my @COMBINATIONS = (
             ? "--fs --geometry=$1" : "--fs"),
     ],
     [VO =>
+        "--vo=vdpau",
         "--vo=vdpau:fps=-1",
         "--vo=xv",
         "--vo=opengl:sw",
