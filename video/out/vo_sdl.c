@@ -193,9 +193,13 @@ struct priv {
     unsigned int mouse_timer;
     int mouse_hidden;
     int brightness, contrast;
+
+    // options
+    int allow_sw;
 };
 
-static bool is_good_renderer(int n, const char *driver_name_wanted)
+static bool is_good_renderer(int n, const char *driver_name_wanted,
+                             int allow_sw)
 {
     SDL_RendererInfo ri;
     if (SDL_GetRenderDriverInfo(n, &ri))
@@ -204,6 +208,9 @@ static bool is_good_renderer(int n, const char *driver_name_wanted)
     if (driver_name_wanted && driver_name_wanted[0])
         if (strcmp(driver_name_wanted, ri.name))
             return false;
+
+    if (!allow_sw && !(ri.flags & SDL_RENDERER_ACCELERATED))
+        return false;
 
     int i, j;
     for (i = 0; i < ri.num_texture_formats; ++i)
@@ -272,11 +279,12 @@ static int init_renderer(struct vo *vo, int w, int h)
     int n = SDL_GetNumRenderDrivers();
     int i;
     for (i = 0; i < n; ++i)
-        if (is_good_renderer(i, SDL_GetHint(SDL_HINT_RENDER_DRIVER)))
+        if (is_good_renderer(i, SDL_GetHint(SDL_HINT_RENDER_DRIVER),
+                             vc->allow_sw))
             break;
     if (i >= n)
         for (i = 0; i < n; ++i)
-            if (is_good_renderer(i, NULL))
+            if (is_good_renderer(i, NULL, vc->allow_sw))
                 break;
     if (i >= n) {
         mp_msg(MSGT_VO, MSGL_ERR, "[sdl] No supported renderer\n");
@@ -1016,6 +1024,10 @@ const struct vo_driver video_out_sdl = {
         ""
     },
     .priv_size = sizeof(struct priv),
+    .options = (const struct m_option []){
+        OPT_FLAG_ON("sw", allow_sw, 0),
+        {NULL}
+    },
     .preinit = preinit,
     .config = config,
     .control = control,
