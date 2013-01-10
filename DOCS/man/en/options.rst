@@ -650,7 +650,7 @@
     Adjust the gamma of the video signal (default: 0). Not supported by all
     video output drivers.
 
---gapless-audio
+--gapless-audio=<weak|yes|no>
     Try to play consecutive audio files with no silence or disruption at the
     point of file change. This feature is implemented in a simple manner and
     relies on audio output device buffering to continue playback while moving
@@ -667,6 +667,10 @@
     reduced sound quality. If you play files with different parameters,
     consider using options such as ``--srate`` and ``--format`` to explicitly
     select what the shared output format will be.
+
+    :weak: Use gapless audio for files with equal sample rates (default).
+    :no:   Never use gapless audio.
+    :yes:  Always use gapless audio, possibly resampling to lower quality.
 
 --geometry=<x[%][:y[%]]>, --geometry=<[WxH][+-x+-y]>
     Adjust where the output is on the screen initially. The x and y

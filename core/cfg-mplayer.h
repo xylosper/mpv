@@ -570,7 +570,10 @@ const m_option_t mplayer_opts[]={
                ({"auto", -1},
                 {"no", 0},
                 {"yes", 1})),
-    OPT_MAKE_FLAGS("gapless-audio", gapless_audio, 0),
+    OPT_CHOICE("gapless-audio", gapless_audio, 0,
+               ({"no", 0},
+                {"weak", 1},
+                {"yes", 2}, {"", 2})),
     // override audio buffer size (used only by -ao oss/win32, obsolete)
     OPT_INT("abs", ao_buffersize, 0),
 

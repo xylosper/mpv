@@ -173,6 +173,10 @@ typedef struct MPContext {
     struct ao *ao;
     struct vo *video_out;
 
+    /* true if gapless audio playback is enabled, and MPContext.ao is still
+     * playing audio from the previous file. */
+    bool draining_audio;
+    int previous_samplerate;
     /* We're starting playback from scratch or after a seek. Show first
      * video frame immediately and reinitialize sync. */
     bool restart_playback;

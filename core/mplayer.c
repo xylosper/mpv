@@ -516,6 +516,19 @@ static void uninit_subs(struct demuxer *demuxer)
     }
 }
 
+static void uninit_ao(struct MPContext *mpctx, bool drain)
+{
+    if (mpctx->initialized_flags & INITIALIZED_AO) {
+        mpctx->initialized_flags &= ~INITIALIZED_AO;
+        if (mpctx->mixer.ao)
+            mixer_uninit(&mpctx->mixer);
+        if (mpctx->ao)
+            ao_uninit(mpctx->ao, !drain);
+        mpctx->ao = NULL;
+        mpctx->mixer.ao = NULL;
+    }
+}
+
 void uninit_player(struct MPContext *mpctx, unsigned int mask)
 {
     mask &= mpctx->initialized_flags;
@@ -609,13 +622,7 @@ void uninit_player(struct MPContext *mpctx, unsigned int mask)
     }
 
     if (mask & INITIALIZED_AO) {
-        mpctx->initialized_flags &= ~INITIALIZED_AO;
-        if (mpctx->mixer.ao)
-            mixer_uninit(&mpctx->mixer);
-        if (mpctx->ao)
-            ao_uninit(mpctx->ao, mpctx->stop_play != AT_END_OF_FILE);
-        mpctx->ao = NULL;
-        mpctx->mixer.ao = NULL;
+        uninit_ao(mpctx, mpctx->stop_play == AT_END_OF_FILE);
     }
 }
 
@@ -1598,6 +1605,21 @@ void reinit_audio_chain(struct MPContext *mpctx)
         if (!init_best_audio_codec(mpctx->sh_audio, audio_codec_list, audio_fm_list))
             goto init_error;
         mpctx->initialized_flags |= INITIALIZED_ACODEC;
+
+        // If gapless audio is used in weak mode, and sample rate changes,
+        // force AO reinitialization to allow output with best sample rate.
+        if ((mpctx->initialized_flags & INITIALIZED_AO) &&
+            mpctx->draining_audio && opts->gapless_audio == 1)
+        {
+            if (mpctx->sh_audio->samplerate != mpctx->ao->samplerate &&
+                mpctx->sh_audio->samplerate != mpctx->previous_samplerate)
+            {
+                uninit_ao(mpctx, true); // blocks to play remaining audio
+            }
+        }
+
+        mpctx->draining_audio = false;
+        mpctx->previous_samplerate = mpctx->sh_audio->samplerate;
     }
 
     if (!(mpctx->initialized_flags & INITIALIZED_AO)) {
@@ -2724,6 +2746,7 @@ static bool timeline_set_part(struct MPContext *mpctx, int i, bool force)
         mpctx->stop_play = AT_END_OF_FILE;  // let audio uninit drain data
     uninit_player(mpctx, INITIALIZED_VCODEC | (mpctx->opts.fixed_vo ? 0 : INITIALIZED_VO) | (mpctx->opts.gapless_audio ? 0 : INITIALIZED_AO) | INITIALIZED_ACODEC | INITIALIZED_SUB);
     mpctx->stop_play = orig_stop_play;
+    mpctx->draining_audio = mpctx->opts.gapless_audio;
 
     mpctx->demuxer = n->source;
     mpctx->stream = mpctx->demuxer->stream;
@@ -3813,6 +3836,7 @@ static void play_current_file(struct MPContext *mpctx)
     mpctx->stop_play = 0;
     mpctx->filename = NULL;
     mpctx->file_format = DEMUXER_TYPE_UNKNOWN;
+    mpctx->draining_audio = mpctx->initialized_flags & INITIALIZED_AO;
 
     if (mpctx->playlist->current)
         mpctx->filename = mpctx->playlist->current->filename;
