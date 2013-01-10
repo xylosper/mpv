@@ -29,6 +29,7 @@
 #include "core/subopt-helper.h"
 #include "audio/format.h"
 #include "core/mp_msg.h"
+#include "osdep/timer.h"
 #include "ao.h"
 
 struct priv {
@@ -63,6 +64,8 @@ static const struct format_map format_maps[] = {
     {AF_FORMAT_FLOAT_NE,    paFloat32},
     {AF_FORMAT_UNKNOWN,     0}
 };
+
+static float get_delay(struct ao *ao);
 
 static void print_help(void)
 {
@@ -238,6 +241,10 @@ static void uninit(struct ao *ao, bool cut_audio)
 
             pthread_mutex_unlock(&priv->ring_mutex);
 
+            // Normally Pa_StopStream() should block until the remaining audio
+            // buffers have been played. But at least on ALSA, it returns
+            // immediately. Compensate by waiting explicitly.
+            usec_sleep(get_delay(ao) * 1000000);
             check_pa_ret(Pa_StopStream(priv->stream));
         }
         check_pa_ret(Pa_CloseStream(priv->stream));
