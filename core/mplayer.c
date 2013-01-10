@@ -1595,52 +1595,79 @@ static void update_osd_msg(struct MPContext *mpctx)
 void reinit_audio_chain(struct MPContext *mpctx)
 {
     struct MPOpts *opts = &mpctx->opts;
-    struct ao *ao;
     init_demux_stream(mpctx, STREAM_AUDIO);
     if (!mpctx->sh_audio) {
         uninit_player(mpctx, INITIALIZED_AO);
         goto no_audio;
     }
+
+    int ao_srate = force_srate;
+    int ao_channels = 0;
+    int ao_format = opts->audio_output_format;
+
     if (!(mpctx->initialized_flags & INITIALIZED_ACODEC)) {
         if (!init_best_audio_codec(mpctx->sh_audio, audio_codec_list, audio_fm_list))
             goto init_error;
         mpctx->initialized_flags |= INITIALIZED_ACODEC;
 
-        // If gapless audio is used in weak mode, and sample rate changes,
+        // If gapless audio is used in weak mode, and output format changes,
         // force AO reinitialization to allow output with best sample rate.
         if ((mpctx->initialized_flags & INITIALIZED_AO) &&
             mpctx->draining_audio && opts->gapless_audio == 1)
         {
-            if (mpctx->sh_audio->samplerate != mpctx->ao->samplerate &&
-                mpctx->sh_audio->samplerate != mpctx->previous_samplerate)
+            int new_srate = ao_srate;
+            int new_channels = ao_channels;
+            int new_format = ao_format;
+            // Prove the format without any AO involvement to determine the
+            // ideal format.
+            // If this call fails, continue with default parameters.
+            init_audio_filters(mpctx->sh_audio, mpctx->sh_audio->samplerate,
+                               &new_srate, &new_channels, &new_format);
+            if (((new_srate != mpctx->ao->samplerate) ||
+                 (new_channels != mpctx->ao->channels) ||
+                 (new_format != mpctx->ao->format))
+                &&
+                // Don't retry if the last attempt was unsuccessful too
+                ((new_srate != mpctx->prev_af_srate) ||
+                 (new_channels != mpctx->prev_af_channels) ||
+                 (new_format != mpctx->prev_af_format)))
             {
-                uninit_ao(mpctx, true); // blocks to play remaining audio
+                // Allow trying a new AO output format configuration.
+                // Blocks to play remaining audio.
+                uninit_ao(mpctx, true);
             }
+            mpctx->prev_af_srate = new_srate;
+            mpctx->prev_af_channels = new_channels;
+            mpctx->prev_af_format = new_format;
         }
 
         mpctx->draining_audio = false;
-        mpctx->previous_samplerate = mpctx->sh_audio->samplerate;
     }
 
-    if (!(mpctx->initialized_flags & INITIALIZED_AO)) {
-        mpctx->initialized_flags |= INITIALIZED_AO;
-        mpctx->ao = ao_create(opts, mpctx->input);
-        mpctx->ao->samplerate = force_srate;
-        mpctx->ao->format = opts->audio_output_format;
+    if (mpctx->initialized_flags & INITIALIZED_AO) {
+        ao_srate = mpctx->ao->samplerate;
+        ao_channels = mpctx->ao->channels;
+        ao_format = mpctx->ao->format;
     }
-    ao = mpctx->ao;
 
     // first init to detect best values
     if (!init_audio_filters(mpctx->sh_audio,  // preliminary init
                             // input:
                             mpctx->sh_audio->samplerate,
                             // output:
-                            &ao->samplerate, &ao->channels, &ao->format)) {
+                            &ao_srate, &ao_channels, &ao_format)) {
         mp_tmsg(MSGT_CPLAYER, MSGL_ERR, "Error at audio filter chain "
                 "pre-init!\n");
         goto init_error;
     }
-    if (!ao->initialized) {
+
+    if (!(mpctx->initialized_flags & INITIALIZED_AO)) {
+        mpctx->initialized_flags |= INITIALIZED_AO;
+        mpctx->ao = ao_create(opts, mpctx->input);
+        struct ao *ao = mpctx->ao;
+        ao->samplerate = ao_srate;
+        ao->channels = ao_channels;
+        ao->format = ao_format;
         ao->buffersize = opts->ao_buffersize;
         ao->encode_lavc_ctx = mpctx->encode_lavc_ctx;
         ao_init(ao, opts->audio_driver_list);
@@ -1672,7 +1699,7 @@ void reinit_audio_chain(struct MPContext *mpctx)
     mpctx->mixer.volstep = volstep;
     mpctx->mixer.softvol = opts->softvol;
     mpctx->mixer.softvol_max = opts->softvol_max;
-    mixer_reinit(&mpctx->mixer, ao);
+    mixer_reinit(&mpctx->mixer, mpctx->ao);
     mpctx->syncing_audio = true;
     return;
 
@@ -1681,6 +1708,8 @@ init_error:
     cleanup_demux_stream(mpctx, STREAM_AUDIO);
 no_audio:
     mpctx->current_track[STREAM_AUDIO] = NULL;
+    mpctx->prev_af_srate = mpctx->prev_af_channels = mpctx->prev_af_format = 0;
+    mpctx->draining_audio = false;
     mp_tmsg(MSGT_CPLAYER, MSGL_INFO, "Audio: no audio\n");
 }
 

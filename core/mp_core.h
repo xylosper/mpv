@@ -176,7 +176,10 @@ typedef struct MPContext {
     /* true if gapless audio playback is enabled, and MPContext.ao is still
      * playing audio from the previous file. */
     bool draining_audio;
-    int previous_samplerate;
+    /* Last configuration requested by filter chain before AO. This is
+     * basically the ideal audio configuration, but the AO might change
+     * the format due to hardware constraints. */
+    int prev_af_srate, prev_af_format, prev_af_channels;
     /* We're starting playback from scratch or after a seek. Show first
      * video frame immediately and reinitialize sync. */
     bool restart_playback;
