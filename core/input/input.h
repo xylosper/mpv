@@ -203,7 +203,12 @@ char *mp_input_get_section(struct input_ctx *ictx);
 
 // Initialize the input system
 struct input_conf;
-struct input_ctx *mp_input_init(struct input_conf *input_conf);
+struct mp_fifo;
+struct MPOpts;
+struct input_ctx *mp_input_init(struct input_conf *input_conf,
+                                struct mp_fifo **key_fifo,
+                                struct MPOpts *opts,
+                                bool use_getch2);
 
 void mp_input_uninit(struct input_ctx *ictx);
 

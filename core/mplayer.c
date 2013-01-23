@@ -594,14 +594,6 @@ void uninit_player(struct MPContext *mpctx, unsigned int mask)
         mpctx->video_out = NULL;
     }
 
-    // Must be after libvo uninit, as few vo drivers (svgalib) have tty code.
-    if (mask & INITIALIZED_GETCH2) {
-        mpctx->initialized_flags &= ~INITIALIZED_GETCH2;
-        mp_msg(MSGT_CPLAYER, MSGL_DBG2, "\n[[[uninit getch2]]]\n");
-        // restore terminal:
-        getch2_disable();
-    }
-
     if (mask & INITIALIZED_SPUDEC) {
         mpctx->initialized_flags &= ~INITIALIZED_SPUDEC;
         spudec_free(vo_spudec);
@@ -3546,13 +3538,6 @@ static void run_playloop(struct MPContext *mpctx)
 }
 
 
-static int read_keys(void *ctx, int fd)
-{
-    if (getch2(ctx))
-        return MP_INPUT_NOTHING;
-    return MP_INPUT_DEAD;
-}
-
 static bool attachment_is_font(struct demux_attachment *att)
 {
     if (!att->name || !att->type || !att->data || !att->data_size)
@@ -3658,12 +3643,13 @@ static void check_previous_track_selection(struct MPContext *mpctx)
 
 static void init_input(struct MPContext *mpctx)
 {
-    mpctx->input = mp_input_init(&mpctx->opts.input);
-    mpctx->key_fifo = mp_fifo_create(mpctx->input, &mpctx->opts);
+    mpctx->input = mp_input_init(&mpctx->opts.input, &mpctx->key_fifo,
+                                 &mpctx->opts,
+                                 mpctx->opts.consolecontrols && !slave_mode);
+
     if (slave_mode)
         mp_input_add_cmd_fd(mpctx->input, 0, USE_FD0_CMD_SELECT, MP_INPUT_SLAVE_CMD_FUNC, NULL);
-    else if (mpctx->opts.consolecontrols)
-        mp_input_add_key_fd(mpctx->input, 0, 1, read_keys, NULL, mpctx->key_fifo);
+
     // Set the libstream interrupt callback
     stream_set_interrupt_callback(mp_input_check_interrupt, mpctx->input);
 }
@@ -3870,18 +3856,6 @@ static void play_current_file(struct MPContext *mpctx)
     assert(mpctx->playlist->current);
     load_per_file_options(mpctx->mconfig, mpctx->playlist->current->params,
                           mpctx->playlist->current->num_params);
-
-    // We must enable getch2 here to be able to interrupt network connection
-    // or cache filling
-    if (opts->consolecontrols && !slave_mode) {
-        if (mpctx->initialized_flags & INITIALIZED_GETCH2)
-            mp_tmsg(MSGT_CPLAYER, MSGL_WARN,
-                    "WARNING: getch2_init called twice!\n");
-        else
-            getch2_enable();  // prepare stdin for hotkeys...
-        mpctx->initialized_flags |= INITIALIZED_GETCH2;
-        mp_msg(MSGT_CPLAYER, MSGL_DBG2, "\n[[[init getch2]]]\n");
-    }
 
 #ifdef CONFIG_ASS
     if (opts->ass_style_override)
@@ -4154,7 +4128,7 @@ goto_enable_cache: ;
 #ifdef CONFIG_DVBIN
     if (mpctx->dvbin_reopen) {
         mpctx->stop_play = 0;
-        uninit_player(mpctx, INITIALIZED_ALL - (INITIALIZED_STREAM | INITIALIZED_GETCH2 | (opts->fixed_vo ? INITIALIZED_VO : 0)));
+        uninit_player(mpctx, INITIALIZED_ALL - (INITIALIZED_STREAM | (opts->fixed_vo ? INITIALIZED_VO : 0)));
         cache_uninit(mpctx->stream);
         mpctx->dvbin_reopen = 0;
         goto goto_enable_cache;

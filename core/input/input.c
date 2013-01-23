@@ -1758,7 +1758,17 @@ char *mp_input_get_section(struct input_ctx *ictx)
     return ictx->section;
 }
 
-struct input_ctx *mp_input_init(struct input_conf *input_conf)
+static int getch2_read_keys(void *ctx, int fd)
+{
+    if (getch2(ctx))
+        return MP_INPUT_NOTHING;
+    return MP_INPUT_DEAD;
+}
+
+struct input_ctx *mp_input_init(struct input_conf *input_conf,
+                                struct mp_fifo **key_fifo,
+                                struct MPOpts *opts,
+                                bool use_getch2)
 {
     struct input_ctx *ictx = talloc_ptrtype(NULL, ictx);
     *ictx = (struct input_ctx){
@@ -1793,6 +1803,13 @@ struct input_ctx *mp_input_init(struct input_conf *input_conf)
         mp_input_add_key_fd(ictx, ictx->wakeup_pipe[0], true, read_wakeup,
                             NULL, NULL);
 #endif
+
+    *key_fifo = mp_fifo_create(ictx, opts);
+
+    if (use_getch2) {
+        getch2_enable();
+        mp_input_add_key_fd(ictx, 0, 1, getch2_read_keys, NULL, *key_fifo);
+    }
 
     char *file;
     char *config_file = input_conf->config_file;
@@ -1893,6 +1910,8 @@ void mp_input_uninit(struct input_ctx *ictx)
 #ifdef CONFIG_COCOA
     cocoa_events_uninit();
 #endif
+
+    getch2_disable();
 
     if (!ictx)
         return;
