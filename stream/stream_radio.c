@@ -60,6 +60,10 @@
 
 #endif
 
+#ifdef CONFIG_RADIO_V4L2
+#include <linux/videodev2.h>
+#endif
+
 typedef struct radio_channels_s {
     int index;     ///< channel index in channels list
     float freq;    ///< frequency in MHz
