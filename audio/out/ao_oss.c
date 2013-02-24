@@ -34,13 +34,7 @@
 #include "core/mp_msg.h"
 #include "audio/mixer.h"
 
-#ifdef HAVE_SYS_SOUNDCARD_H
-#include <sys/soundcard.h>
-#else
-#ifdef HAVE_SOUNDCARD_H
-#include <soundcard.h>
-#endif
-#endif
+#include SOUNDCARD_H_PATH
 
 #include "audio/format.h"
 

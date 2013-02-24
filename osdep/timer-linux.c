@@ -28,14 +28,10 @@
 
 int usec_sleep(int usec_delay)
 {
-#ifdef HAVE_NANOSLEEP
     struct timespec ts;
     ts.tv_sec  =  usec_delay / 1000000;
     ts.tv_nsec = (usec_delay % 1000000) * 1000;
     return nanosleep(&ts, NULL);
-#else
-    return usleep(usec_delay);
-#endif
 }
 
 // Returns current time in microseconds
