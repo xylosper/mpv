@@ -33,6 +33,7 @@
 
 extern const ad_functions_t mpcodecs_ad_mpg123;
 extern const ad_functions_t mpcodecs_ad_lavc;
+extern const ad_functions_t mpcodecs_ad_hwac3;
 extern const ad_functions_t mpcodecs_ad_spdif;
 
 const ad_functions_t * const mpcodecs_ad_drivers[] =
@@ -41,6 +42,7 @@ const ad_functions_t * const mpcodecs_ad_drivers[] =
   &mpcodecs_ad_mpg123,
 #endif
   &mpcodecs_ad_lavc,
+  &mpcodecs_ad_hwac3,
   &mpcodecs_ad_spdif,
   NULL
 };
