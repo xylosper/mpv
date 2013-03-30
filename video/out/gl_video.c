@@ -43,6 +43,8 @@ static const char vo_opengl_shaders[] =
 #include "gl_video_shaders.h"
 ;
 
+#include "video/out/dither_matrix.h"
+
 // Pixel width of 1D lookup textures.
 #define LOOKUP_TEXTURE_SIZE 256
 
@@ -898,18 +900,6 @@ static void init_scaler(struct gl_video *p, struct scaler *scaler)
     debug_check_gl(p, "after initializing scaler");
 }
 
-static void make_dither_matrix(unsigned char *m, int size)
-{
-    m[0] = 0;
-    for (int sz = 1; sz < size; sz *= 2) {
-        int offset[] = {sz*size, sz, sz * (size+1), 0};
-        for (int i = 0; i < 4; i++)
-            for (int y = 0; y < sz * size; y += size)
-                for (int x = 0; x < sz; x++)
-                    m[x+y+offset[i]] = m[x+y] * 4 + (3-i) * 256/size/size;
-    }
-}
-
 static void init_dither(struct gl_video *p)
 {
     GL *gl = p->gl;
@@ -924,30 +914,33 @@ static void init_dither(struct gl_video *p)
 
     mp_msg(MSGT_VO, MSGL_V, "[gl] Dither to %d.\n", dst_depth);
 
+    void *tmp = talloc_new(NULL);
+    float *dither = talloc_array(tmp, float, mp_dither_size2);
+    for (int n = 0; n < mp_dither_size2; n++)
+        dither[n] = (float)mp_dither_matrix[n] / (float)mp_dither_size2;
+
     // This defines how many bits are considered significant for output on
     // screen. The superfluous bits will be used for rounded according to the
     // dither matrix. The precision of the source implicitly decides how many
     // dither patterns can be visible.
     p->dither_quantization = (1 << dst_depth) - 1;
-    int size = 8;
-    p->dither_multiply = p->dither_quantization + 1.0 / (size*size);
-    unsigned char dither[256];
-    make_dither_matrix(dither, size);
-
-    p->dither_size = size;
+    p->dither_multiply = p->dither_quantization + 1.0 / mp_dither_size2;
+    p->dither_size = mp_dither_size;
 
     gl->ActiveTexture(GL_TEXTURE0 + TEXUNIT_DITHER);
     gl->GenTextures(1, &p->dither_texture);
     gl->BindTexture(GL_TEXTURE_2D, p->dither_texture);
     gl->PixelStorei(GL_UNPACK_ALIGNMENT, 1);
     gl->PixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-    gl->TexImage2D(GL_TEXTURE_2D, 0, GL_RED, size, size, 0, GL_RED,
-                   GL_UNSIGNED_BYTE, dither);
+    gl->TexImage2D(GL_TEXTURE_2D, 0, GL_RED, mp_dither_size, mp_dither_size, 0, GL_RED,
+                   GL_FLOAT, dither);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     gl->ActiveTexture(GL_TEXTURE0);
+
+    talloc_free(tmp);
 }
 
 static void recreate_osd(struct gl_video *p)
