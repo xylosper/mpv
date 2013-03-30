@@ -450,6 +450,7 @@ clean:
 	-$(RM) demux/ebml_types.h demux/ebml_defs.c
 	-$(RM) video/out/gl_video_shaders.h
 	-$(RM) sub/osd_font.h
+	-$(RM) dither_matrix
 
 distclean: clean
 	-$(RM) config.log config.mak config.h TAGS tags
@@ -462,6 +463,12 @@ tags:
 
 osxbundle:
 	@TOOLS/osxbundle.py mpv
+
+# Not part of the normal build process.
+HOSTCC = cc
+dither-matrix:
+	$(HOSTCC) -o dither_matrix TOOLS/dither_matrix.c -O -std=c99 -lm
+	./dither_matrix > video/out/dither_matrix.h
 
 -include $(DEP_FILES)
 
