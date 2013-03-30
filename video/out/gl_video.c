@@ -1513,6 +1513,11 @@ static void check_gl_features(struct gl_video *p)
         }
     }
 
+    if (!have_float_tex && p->opts.dither_depth >= 0) {
+        p->opts.dither_depth = -1;
+        disabled[n_disabled++] = "dithering (float tex.)";
+    }
+
     if (!have_srgb && p->opts.srgb) {
         p->opts.srgb = false;
         disabled[n_disabled++] = "sRGB";
