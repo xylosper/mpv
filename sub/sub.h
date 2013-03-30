@@ -136,6 +136,7 @@ struct osd_state {
     float progbar_value;   // range 0.0-1.0
     float *progbar_stops;  // used for chapter indicators (0.0-1.0 each)
     int progbar_num_stops;
+    bool progbar_highlight;
 
     int switch_sub_id;
 
@@ -235,5 +236,8 @@ void osd_object_get_bitmaps(struct osd_state *osd, struct osd_object *obj,
 void osd_get_function_sym(char *buffer, size_t buffer_size, int osd_function);
 void osd_init_backend(struct osd_state *osd);
 void osd_destroy_backend(struct osd_state *osd);
+
+float osd_get_mouse_bar_pos(struct osd_state *osd, float m_x, float m_y,
+                            float snap_dist);
 
 #endif /* MPLAYER_SUB_H */

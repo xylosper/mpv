@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <math.h>
 
 #include <libavutil/common.h>
 
@@ -287,6 +288,8 @@ static void update_progbar(struct osd_state *osd, struct osd_object *obj)
     struct ass_draw *d = &(struct ass_draw) { .scale = 4 };
     // filled area
     d->text = talloc_asprintf_append(d->text, "{\\pos(%f,%f)}", px, py);
+    if (osd->progbar_highlight)
+        d->text = talloc_asprintf_append(d->text, "{\\alpha&H60}");
     ass_draw_start(d);
     float pos = osd->progbar_value * width - border / 2;
     ass_draw_rect_cw(d, 0, 0, pos, height);
@@ -322,6 +325,37 @@ static void update_progbar(struct osd_state *osd, struct osd_object *obj)
     ass_draw_stop(d);
     add_osd_ass_event(obj->osd_track, d->text);
     ass_draw_reset(d);
+}
+
+// Return what the mouse at (m_x, m_y) would select from the bar (0.0-1.0).
+// snap_dist = min. distance of mouse to bar (as ratio of screen width)
+//             if this is <0, ignore and always return position
+// Return -1 on failure or out-of-snap-area.
+float osd_get_mouse_bar_pos(struct osd_state *osd, float m_x, float m_y,
+                            float snap_dist)
+{
+    struct osd_object *obj = osd->objs[OSDTYPE_PROGBAR];
+
+    if (obj->vo_res.w <= 0 || obj->vo_res.h <= 0)
+        return -1;
+
+    float px, py, width, height, border;
+    get_osd_bar_box(osd, obj, &px, &py, &width, &height, &border);
+
+    float script_dist = obj->osd_track->PlayResX * snap_dist;
+
+    float script_m_x = m_x / obj->vo_res.w * obj->osd_track->PlayResX;
+    float script_m_y = m_y / obj->vo_res.h * obj->osd_track->PlayResY;
+
+    float c_m_x = av_clipf(script_m_x, px, px + width);
+    float c_m_y = av_clipf(script_m_y, py, py + height);
+
+#define LENGTH(x, y) sqrt(((x) * (x)) + ((y) * (y)))
+    float dist = LENGTH(script_m_x - c_m_x, script_m_y - c_m_y);
+
+    float pos = (c_m_x - px) / width;
+
+    return (snap_dist < 0 || dist <= script_dist) ? pos : -1;
 }
 
 static void update_sub(struct osd_state *osd, struct osd_object *obj)

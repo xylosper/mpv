@@ -38,6 +38,7 @@
 #define OSD_LEVEL_INVISIBLE 4
 
 #define OSD_BAR_SEEK 256
+#define OSD_BAR_SEEK_SEL 257
 
 struct MPContext;
 
@@ -48,5 +49,9 @@ void rm_osd_msg(struct MPContext *mpctx, int id);
 
 // osd_function is the symbol appearing in the video status, such as OSD_PLAY
 void set_osd_function(struct MPContext *mpctx, int osd_function);
+
+void set_osd_bar_chapters(struct MPContext *mpctx, int type);
+void set_osd_bar_highlight(struct MPContext *mpctx, int type);
+void osd_bar_hide(struct MPContext *mpctx);
 
 #endif /* MPLAYER_MP_OSD_H */

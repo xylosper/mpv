@@ -79,37 +79,39 @@ static char *format_delay(double time)
     return talloc_asprintf(NULL, "%d ms", ROUND(time * 1000));
 }
 
-static void rescale_input_coordinates(struct MPContext *mpctx, int ix, int iy,
-                                      double *dx, double *dy)
+static double seek_to = -1;
+
+static void handle_mouse_movement(struct MPContext *mpctx, int x, int y)
 {
-    struct MPOpts *opts = &mpctx->opts;
-    struct vo *vo = mpctx->video_out;
-    //remove the borders, if any, and rescale to the range [0,1],[0,1]
-    if (opts->vo.fs) {                //we are in full-screen mode
-        if (opts->vo.screenwidth > vo->dwidth)
-            // there are borders along the x axis
-            ix -= (opts->vo.screenwidth - vo->dwidth) / 2;
-        if (opts->vo.screenheight > vo->dheight)
-            // there are borders along the y axis (usual way)
-            iy -= (opts->vo.screenheight - vo->dheight) / 2;
-
-        if (ix < 0 || ix > vo->dwidth) {
-            *dx = *dy = -1.0;
-            return;
-        }                       //we are on one of the borders
-        if (iy < 0 || iy > vo->dheight) {
-            *dx = *dy = -1.0;
-            return;
-        }                       //we are on one of the borders
+    float c[2] = {x, y};
+    if (mpctx->video_out)
+        vo_control(mpctx->video_out, VOCTRL_WINDOW_TO_OSD_COORDS, c);
+    seek_to = -1;
+    float p = osd_get_mouse_bar_pos(mpctx->osd, c[0], c[1], 0.05);
+    if (p >= 0) {
+        // close enough to interact with seek bar
+        set_osd_bar(mpctx, OSD_BAR_SEEK_SEL, "Seek to", 0, 1, p);
+        set_osd_bar_chapters(mpctx, OSD_BAR_SEEK_SEL);
+        set_osd_bar_highlight(mpctx, OSD_BAR_SEEK_SEL);
+        seek_to = p;
+        return;
     }
+    p = osd_get_mouse_bar_pos(mpctx->osd, c[0], c[1], 0.1);
+    if (p >= 0) {
+        // close enough to show seek bar
+        mpctx->add_osd_seek_info |= OSD_SEEK_INFO_BAR;
+        return;
+    }
+    osd_bar_hide(mpctx);
+}
 
-    *dx = (double) ix / (double) vo->dwidth;
-    *dy = (double) iy / (double) vo->dheight;
-
-    mp_msg(MSGT_CPLAYER, MSGL_V,
-           "\r\nrescaled coordinates: %.3f, %.3f, screen (%d x %d), vodisplay: (%d, %d), fullscreen: %d\r\n",
-           *dx, *dy, opts->vo.screenwidth, opts->vo.screenheight, vo->dwidth,
-           vo->dheight, opts->vo.fs);
+static void handle_mouse_click(struct MPContext *mpctx)
+{
+    if (mpctx->osd->progbar_type == OSD_BAR_SEEK_SEL &&
+        seek_to != -1)
+    {
+        queue_seek(mpctx, MPSEEK_FACTOR, seek_to, -1);
+    }
 }
 
 // Property-option bridge.
@@ -2214,14 +2216,13 @@ void run_command(MPContext *mpctx, mp_cmd_t *cmd)
         mplayer_put_key(mpctx->key_fifo, cmd->args[0].v.i);
         break;
 
-    case MP_CMD_SET_MOUSE_POS: {
-        int pointer_x, pointer_y;
-        double dx, dy;
-        pointer_x = cmd->args[0].v.i;
-        pointer_y = cmd->args[1].v.i;
-        rescale_input_coordinates(mpctx, pointer_x, pointer_y, &dx, &dy);
+    case MP_CMD_SET_MOUSE_POS:
+        handle_mouse_movement(mpctx, cmd->args[0].v.i, cmd->args[1].v.i);
         break;
-    }
+
+    case MP_CMD_WHATEVER:
+        handle_mouse_click(mpctx);
+        break;
 
     case MP_CMD_VO_CMDLINE:
         if (mpctx->video_out) {

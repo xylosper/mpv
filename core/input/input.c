@@ -191,6 +191,7 @@ static const mp_cmd_t mp_cmds[] = {
   }},
 
   { MP_CMD_SET_MOUSE_POS, "set_mouse_pos", { ARG_INT, ARG_INT } },
+  { MP_CMD_WHATEVER, "whateverthisis", },
 
   { MP_CMD_AF_SWITCH, "af_switch", { ARG_STRING } },
   { MP_CMD_AF_ADD, "af_add", { ARG_STRING } },
