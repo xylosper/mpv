@@ -375,7 +375,7 @@ void main() {
 #ifdef USE_DITHER
     vec2 dither_pos = gl_FragCoord.xy / dither_size;
 #ifdef USE_TEMPORAL_DITHER
-    dither_pos = dither_trafo * (dither_pos - vec2(0.5)) + vec2(0.5);
+    dither_pos = dither_trafo * (fract(dither_pos) - vec2(0.5)) + vec2(0.5);
 #endif
     float dither_value = texture(dither, dither_pos).r;
     color = floor(color * dither_multiply + dither_value ) / dither_quantization;
