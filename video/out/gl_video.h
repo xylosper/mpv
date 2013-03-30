@@ -38,6 +38,7 @@ struct gl_video_opts {
     int npot;
     int pbo;
     int dither_depth;
+    int temporal_dither;
     int fbo_format;
     int stereo_mode;
     int enable_alpha;

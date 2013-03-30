@@ -229,6 +229,7 @@ static const char *osd_shaders[SUBBITMAP_COUNT] = {
 static const struct gl_video_opts gl_video_opts_def = {
     .npot = 1,
     .dither_depth = -1,
+    .temporal_dither = 1,
     .fbo_format = GL_RGB,
     .scale_sep = 1,
     .scalers = { "bilinear", "bilinear" },
@@ -268,6 +269,7 @@ const struct m_sub_options gl_video_conf = {
                     {"rgba32f", GL_RGBA32F})),
         OPT_CHOICE_OR_INT("dither-depth", dither_depth, 0, -1, 16,
                           ({"no", -1}, {"auto", 0})),
+        OPT_FLAG("temporal-dither", temporal_dither, 0),
         OPT_FLAG("alpha", enable_alpha, 0),
         {0}
     },
@@ -728,6 +730,7 @@ static void compile_shaders(struct gl_video *p)
     shader_def_opt(&header_final, "USE_3DLUT", p->use_lut_3d);
     shader_def_opt(&header_final, "USE_SRGB", p->opts.srgb);
     shader_def_opt(&header_final, "USE_DITHER", p->dither_texture != 0);
+    shader_def_opt(&header_final, "USE_TEMPORAL_DITHER", p->opts.temporal_dither);
 
     if (p->opts.scale_sep && p->scalers[0].kernel) {
         header_sep = talloc_strdup(tmp, "");
@@ -1110,6 +1113,25 @@ static void uninit_video(struct gl_video *p)
     fbotex_uninit(p, &p->scale_sep_fbo);
 }
 
+static void change_dither_trafo(struct gl_video *p)
+{
+    GL *gl = p->gl;
+    int program = p->final_program;
+
+    int phase = p->frames_rendered % 8u;
+    float rot = phase * (M_PI / 2);
+    float m = phase < 4 ? 1 : -1; // mirror
+
+    gl->UseProgram(program);
+
+    float matrix[2][2] = {{cos(rot),     -sin(rot)    },
+                          {sin(rot) * m,  cos(rot) * m}};
+    gl->UniformMatrix2fv(gl->GetUniformLocation(program, "dither_trafo"),
+                         1, GL_TRUE, &matrix[0][0]);
+
+    gl->UseProgram(0);
+}
+
 static void render_to_fbo(struct gl_video *p, struct fbotex *fbo, int w, int h,
                           int tex_w, int tex_h)
 {
@@ -1151,6 +1173,8 @@ void gl_video_render_frame(struct gl_video *p)
     struct vertex vb[VERTICES_PER_QUAD];
     struct video_image *vimg = &p->image;
     bool is_flipped = vimg->image_flipped;
+
+    change_dither_trafo(p);
 
     if (p->dst_rect.x0 > p->vp_x || p->dst_rect.y0 > p->vp_y
         || p->dst_rect.x1 < p->vp_x + p->vp_w
@@ -1219,6 +1243,8 @@ void gl_video_render_frame(struct gl_video *p)
     }
 
     gl->UseProgram(0);
+
+    p->frames_rendered++;
 
     debug_check_gl(p, "after video rendering");
 }

@@ -334,6 +334,10 @@ opengl
         detected. Often, LCD panels will do dithering on their own, which
         conflicts with vo_opengl's dithering, and leads to ugly output.
 
+    no-temporal-dither
+        Disable temporal dithering. (Enabled by default if dithering is
+        enabled.)
+
     debug
         Check for OpenGL errors, i.e. call glGetError(). Also request a
         debug OpenGL context (which does nothing with current graphics drivers

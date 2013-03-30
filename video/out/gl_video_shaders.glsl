@@ -121,6 +121,7 @@ uniform sampler2D lut_l_2d;
 uniform sampler3D lut_3d;
 uniform sampler2D dither;
 uniform mat4x3 colormatrix;
+uniform mat2 dither_trafo;
 uniform vec3 inv_gamma;
 uniform float conv_gamma;
 uniform float dither_quantization;
@@ -372,7 +373,11 @@ void main() {
     color.rgb = srgb_compand(color.rgb);
 #endif
 #ifdef USE_DITHER
-    float dither_value = texture(dither, gl_FragCoord.xy / dither_size).r;
+    vec2 dither_pos = gl_FragCoord.xy / dither_size;
+#ifdef USE_TEMPORAL_DITHER
+    dither_pos = dither_trafo * (dither_pos - vec2(0.5)) + vec2(0.5);
+#endif
+    float dither_value = texture(dither, dither_pos).r;
     color = floor(color * dither_multiply + dither_value ) / dither_quantization;
 #endif
 #ifdef USE_ALPHA
