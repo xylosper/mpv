@@ -1272,11 +1272,8 @@ static mp_osd_msg_t *get_osd_msg(struct MPContext *mpctx)
     if (mpctx->osd_visible) {
         // 36000000 means max timed visibility is 1 hour into the future, if
         // the difference is greater assume it's wrapped around from below 0
-        if (mpctx->osd_visible - now > 36000000) {
-            mpctx->osd_visible = 0;
-            mpctx->osd->progbar_type = -1; // disable
-            vo_osd_changed(OSDTYPE_PROGBAR);
-        }
+        if (mpctx->osd_visible - now > 36000000)
+            osd_bar_hide(mpctx);
     }
     if (mpctx->osd_function_visible) {
         if (mpctx->osd_function_visible - now > 36000000) {
@@ -1323,6 +1320,13 @@ static mp_osd_msg_t *get_osd_msg(struct MPContext *mpctx)
     return NULL;
 }
 
+void osd_bar_hide(struct MPContext *mpctx)
+{
+    mpctx->osd_visible = 0;
+    mpctx->osd->progbar_type = -1;
+    vo_osd_changed(OSDTYPE_PROGBAR);
+}
+
 // type: mp_osd_font_codepoints, ASCII, or OSD_BAR_*
 // name: fallback for terminal OSD
 void set_osd_bar(struct MPContext *mpctx, int type, const char *name,
@@ -1359,11 +1363,11 @@ static void update_osd_bar(struct MPContext *mpctx, int type,
     }
 }
 
-static void set_osd_bar_chapters(struct MPContext *mpctx, int type)
+void set_osd_bar_chapters(struct MPContext *mpctx, int type)
 {
     struct osd_state *osd = mpctx->osd;
-    osd->progbar_num_stops = 0;
     if (osd->progbar_type == type) {
+        osd->progbar_num_stops = 0;
         double len = get_time_length(mpctx);
         if (len > 0) {
             int num = get_chapter_count(mpctx);

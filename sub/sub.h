@@ -236,4 +236,7 @@ void osd_get_function_sym(char *buffer, size_t buffer_size, int osd_function);
 void osd_init_backend(struct osd_state *osd);
 void osd_destroy_backend(struct osd_state *osd);
 
+float osd_get_mouse_bar_pos(struct osd_state *osd, float m_x, float m_y,
+                            float snap_dist);
+
 #endif /* MPLAYER_SUB_H */
