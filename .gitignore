@@ -17,6 +17,7 @@
 /video/out/vdpau_template.c
 /demux/ebml_defs.c
 /demux/ebml_types.h
+/video/filter/vf_lua_lib.h
 /sub/osd_font.h
 /DOCS/man/*/mpv.1
 

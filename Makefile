@@ -117,6 +117,8 @@ SOURCES-$(VDPAU)                += video/out/vo_vdpau.c
 SOURCES-$(X11)                  += video/out/vo_x11.c video/out/x11_common.c
 SOURCES-$(XV)                   += video/out/vo_xv.c
 
+SOURCES-$(LUAJIT)               += video/filter/vf_lua.c
+
 ifeq ($(HAVE_AVUTIL_REFCOUNTING),no)
     SOURCES-yes                 += video/decode/lavc_dr1.c
 endif
@@ -374,6 +376,10 @@ video/out/gl_video.c: video/out/gl_video_shaders.h
 video/out/gl_video_shaders.h: TOOLS/file2string.pl video/out/gl_video_shaders.glsl
 	./$^ >$@
 
+video/filter/vf_lua.c: video/filter/vf_lua_lib.h
+video/filter/vf_lua_lib.h: TOOLS/file2string.pl video/filter/vf_lua_lib.lua
+	./$^ >$@
+
 sub/osd_libass.c: sub/osd_font.h
 sub/osd_font.h: TOOLS/file2string.pl sub/osd_font.pfb
 	./$^ >$@
@@ -447,6 +453,7 @@ clean:
 	-$(RM) video/out/vdpau_template.c
 	-$(RM) demux/ebml_types.h demux/ebml_defs.c
 	-$(RM) video/out/gl_video_shaders.h
+	-$(RM) video/filter/vf_lua_lib.h
 	-$(RM) sub/osd_font.h
 
 distclean: clean
