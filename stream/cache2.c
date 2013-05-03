@@ -301,6 +301,7 @@ static int cache_execute_control(cache_vars_t *s) {
     case STREAM_CTRL_GET_CURRENT_TIME:
     case STREAM_CTRL_GET_ASPECT_RATIO:
     case STREAM_CTRL_GET_START_TIME:
+    case STREAM_CTRL_GET_CHAPTER_TIME:
       s->control_res = s->stream->control(s->stream, s->control, &double_res);
       s->control_double_arg = double_res;
       break;
@@ -665,6 +666,7 @@ int cache_do_control(stream_t *stream, int cmd, void *arg) {
     case STREAM_CTRL_GET_SIZE:
     case STREAM_CTRL_MANAGES_TIMELINE:
     case STREAM_CTRL_GET_START_TIME:
+    case STREAM_CTRL_GET_CHAPTER_TIME:
     case -2:
       s->control = cmd;
       break;
@@ -698,6 +700,7 @@ int cache_do_control(stream_t *stream, int cmd, void *arg) {
     case STREAM_CTRL_GET_CURRENT_TIME:
     case STREAM_CTRL_GET_ASPECT_RATIO:
     case STREAM_CTRL_GET_START_TIME:
+    case STREAM_CTRL_GET_CHAPTER_TIME:
       *(double *)arg = s->control_double_arg;
       break;
     case STREAM_CTRL_GET_NUM_TITLES:
