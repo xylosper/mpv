@@ -1075,7 +1075,7 @@ int demux_seek(demuxer_t *demuxer, float rel_seek_secs, float audio_delay,
      * (nothing actually implements DEMUXER_CTRL_RESYNC now).
      */
     struct stream *stream = demuxer->stream;
-    if (stream->type == STREAMTYPE_DVD) {
+    if (stream_manages_timeline(stream)) {
         double pts;
 
         if (flags & SEEK_ABSOLUTE)
