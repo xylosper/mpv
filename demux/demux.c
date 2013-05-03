@@ -1340,7 +1340,7 @@ int demuxer_seek_chapter(demuxer_t *demuxer, int chapter, double *seek_pts)
         return -1;
     if (chapter < 0)
         chapter = 0;
-    float t = demuxer_chapter_time(demuxer, chapter);
+    double t = demuxer_chapter_time(demuxer, chapter);
     if (t == -1)
         return -1;
     *seek_pts = t;
@@ -1375,7 +1375,7 @@ char *demuxer_chapter_name(demuxer_t *demuxer, int chapter)
     return NULL;
 }
 
-float demuxer_chapter_time(demuxer_t *demuxer, int chapter)
+double demuxer_chapter_time(demuxer_t *demuxer, int chapter)
 {
     if (demuxer->num_chapters && demuxer->chapters && chapter >= 0
         && chapter < demuxer->num_chapters) {

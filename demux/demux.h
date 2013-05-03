@@ -409,7 +409,7 @@ int demuxer_get_current_chapter(struct demuxer *demuxer, double time_now);
 /// Get chapter name by index if available.
 char *demuxer_chapter_name(struct demuxer *demuxer, int chapter);
 /// Get chapter start time by index if available.
-float demuxer_chapter_time(struct demuxer *demuxer, int chapter);
+double demuxer_chapter_time(struct demuxer *demuxer, int chapter);
 /// Get total chapter number.
 int demuxer_chapter_count(struct demuxer *demuxer);
 /// Get current angle index.
