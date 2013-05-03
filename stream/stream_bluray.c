@@ -225,6 +225,11 @@ static int bluray_stream_control(stream_t *s, int cmd, void *arg)
         bd_free_title_info(ti);
         return STREAM_ERROR;
     }
+    case STREAM_CTRL_GET_START_TIME:
+    {
+        *((double *)arg) = 0;
+        return STREAM_OK;
+    }
     case STREAM_CTRL_MANAGES_TIMELINE:
         return STREAM_OK;
 
