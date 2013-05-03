@@ -1365,7 +1365,7 @@ char *demuxer_chapter_name(demuxer_t *demuxer, int chapter)
     return NULL;
 }
 
-float demuxer_chapter_time(demuxer_t *demuxer, int chapter)
+double demuxer_chapter_time(demuxer_t *demuxer, int chapter)
 {
     if (demuxer->num_chapters && demuxer->chapters && chapter >= 0
         && chapter < demuxer->num_chapters) {
