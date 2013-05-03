@@ -1309,6 +1309,7 @@ int demuxer_add_chapter(demuxer_t *demuxer, struct bstr name,
 
 int demuxer_seek_chapter(demuxer_t *demuxer, int chapter, double *seek_pts)
 {
+#if 0
     int ris;
 
     if (!demuxer->num_chapters || !demuxer->chapters) {
@@ -1334,6 +1335,17 @@ int demuxer_seek_chapter(demuxer_t *demuxer, int chapter, double *seek_pts)
 
         return chapter;
     }
+#else
+    if (chapter >= demuxer_chapter_count(demuxer))
+        return -1;
+    if (chapter < 0)
+        chapter = 0;
+    float t = demuxer_chapter_time(demuxer, chapter);
+    if (t == -1)
+        return -1;
+    *seek_pts = t;
+    return chapter;
+#endif
 }
 
 int demuxer_get_current_chapter(demuxer_t *demuxer, double time_now)
