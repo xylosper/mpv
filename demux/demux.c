@@ -1371,6 +1371,9 @@ double demuxer_chapter_time(demuxer_t *demuxer, int chapter)
         && chapter < demuxer->num_chapters) {
         return demuxer->chapters[chapter].start / 1e9;
     }
+    double p = chapter;
+    if (stream_control(demuxer->stream, STREAM_CTRL_GET_CHAPTER_TIME, &p) > 0)
+        return p;
     return -1.0;
 }
 
