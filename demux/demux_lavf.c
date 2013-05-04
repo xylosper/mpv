@@ -425,7 +425,7 @@ static void handle_stream(demuxer_t *demuxer, int i)
 
         if (st->disposition & AV_DISPOSITION_DEFAULT)
             sh->default_track = 1;
-        if (matches_avinputformat_name(priv, "mpeg"))
+        if (matches_avinputformat_name(priv, "mpeg,mpegts"))
             sh->demuxer_id = st->id;
         AVDictionaryEntry *title = av_dict_get(st->metadata, "title", NULL, 0);
         if (title && title->value)
