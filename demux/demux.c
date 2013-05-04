@@ -1415,7 +1415,7 @@ double demuxer_get_time_length(struct demuxer *demuxer)
 double demuxer_get_start_time(struct demuxer *demuxer)
 {
     double time;
-    if (demux_control(demuxer, STREAM_CTRL_GET_START_TIME, &time) > 0)
+    if (stream_control(demuxer->stream, STREAM_CTRL_GET_START_TIME, &time) > 0)
         return time;
     if (demux_control(demuxer, DEMUXER_CTRL_GET_START_TIME, &time) > 0)
         return time;
