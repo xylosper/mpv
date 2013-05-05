@@ -183,6 +183,8 @@ static int bluray_stream_control(stream_t *s, int cmd, void *arg)
     case STREAM_CTRL_SEEK_TO_TIME: {
         double pts = *((double *) arg);
         bd_seek_time(b->bd, BD_TIME_FROM_MP(pts));
+        // Reset mpv internal stream position.
+        stream_seek(s, bd_tell(b->bd));
         // API makes it hard to determine seeking success
         return STREAM_OK;
     }
