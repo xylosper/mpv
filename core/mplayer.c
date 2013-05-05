@@ -2759,6 +2759,11 @@ static void seek_reset(struct MPContext *mpctx, bool reset_ao, bool reset_ac)
 #endif
 }
 
+void mp_reinit_decoding(struct MPContext *mpctx)
+{
+    seek_reset(mpctx, true, true);
+}
+
 static bool timeline_set_part(struct MPContext *mpctx, int i, bool force)
 {
     struct timeline_part *p = mpctx->timeline + mpctx->timeline_part;
