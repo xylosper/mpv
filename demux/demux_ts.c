@@ -1651,6 +1651,15 @@ static int ts_sync(stream_t *stream)
 	return 0;
 }
 
+static void add_packet(struct demux_stream *ds, struct demux_packet *pkt)
+{
+    if (ds->stream_type == STREAM_VIDEO) {
+        double pts;
+        if (stream_control(ds->demuxer->stream, STREAM_CTRL_GET_CURRENT_TIME, &pts) > 0)
+            pkt->stream_pts = pts;
+    }
+    ds_add_packet(ds, pkt);
+}
 
 static void ts_dump_streams(ts_priv_t *priv)
 {
@@ -1661,7 +1670,7 @@ static void ts_dump_streams(ts_priv_t *priv)
 		if((priv->fifo[i].pack != NULL) && (priv->fifo[i].offset != 0))
 		{
 			resize_demux_packet(priv->fifo[i].pack, priv->fifo[i].offset);
-			ds_add_packet(priv->fifo[i].ds, priv->fifo[i].pack);
+			add_packet(priv->fifo[i].ds, priv->fifo[i].pack);
 			priv->fifo[i].offset = 0;
 			priv->fifo[i].pack = NULL;
 		}
@@ -2719,7 +2728,7 @@ static int fill_packet(demuxer_t *demuxer, demux_stream_t *ds, demux_packet_t **
 	{
 		ret = *dp_offset;
 		resize_demux_packet(*dp, ret);	//shrinked to the right size
-		ds_add_packet(ds, *dp);
+		add_packet(ds, *dp);
 		mp_msg(MSGT_DEMUX, MSGL_DBG2, "ADDED %d  bytes to %s fifo, PTS=%.3f\n", ret, (ds == demuxer->audio ? "audio" : (ds == demuxer->video ? "video" : "sub")), (*dp)->pts);
 		if(si)
 		{
@@ -3249,6 +3258,18 @@ static void reset_fifos(demuxer_t *demuxer, int a, int v, int s)
 	demuxer->reference_clock = MP_NOPTS_VALUE;
 }
 
+static void reset_ts(demuxer_t *demuxer)
+{
+        demux_stream_t *d_audio=demuxer->audio;
+        demux_stream_t *d_video=demuxer->video;
+        sh_audio_t *sh_audio=d_audio->sh;
+        sh_video_t *sh_video=d_video->sh;
+
+        ts_dump_streams(demuxer->priv);
+        reset_fifos(demuxer, sh_audio != NULL, sh_video != NULL, demuxer->sub->id > 0);
+
+        demux_flush(demuxer);
+}
 
 static void demux_seek_ts(demuxer_t *demuxer, float rel_seek_secs, float audio_delay, int flags)
 {
@@ -3262,10 +3283,7 @@ static void demux_seek_ts(demuxer_t *demuxer, float rel_seek_secs, float audio_d
 
 	//================= seek in MPEG-TS ==========================
 
-	ts_dump_streams(demuxer->priv);
-	reset_fifos(demuxer, sh_audio != NULL, sh_video != NULL, demuxer->sub->id > 0);
-
-	demux_flush(demuxer);
+	reset_ts(demuxer);
 
 
 
