@@ -4710,6 +4710,9 @@ static int mpv_main(int argc, char *argv[])
 
     mpctx->playlist->current = mpctx->playlist->first;
 
+#ifdef CONFIG_COCOA
+    cocoa_set_state(mpctx->input, mpctx->key_fifo);
+#endif
     play_files(mpctx);
 
     exit_player(mpctx, mpctx->stop_play == PT_QUIT ? EXIT_QUIT : EXIT_EOF,

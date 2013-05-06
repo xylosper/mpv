@@ -184,7 +184,8 @@ static NSAutoreleasePool *pool;
 
     self.files = [filesToOpen sortedArrayUsingSelector:@selector(compare:)];
     if (self.willStopOnOpenEvent) {
-        [NSApp stop:nil];
+        self.willStopOnOpenEvent = NO;
+        cocoa_stop_runloop();
     } else {
         [self handleFiles];
     }
@@ -246,7 +247,7 @@ void cocoa_stop_runloop(void)
 {
     [NSApp performSelectorOnMainThread:@selector(stop:)
                             withObject:nil
-                         waitUntilDone:false];
+                         waitUntilDone:true];
     cocoa_post_fake_event();
 }
 
