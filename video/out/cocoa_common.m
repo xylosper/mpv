@@ -175,7 +175,7 @@ struct vo_cocoa_state {
 
     CGFloat accumulated_scroll;
 
-    NSRecursiveLock *lock;
+    NSLock *lock;
     void (*resize_redraw)(struct vo *vo, int w, int h);
 
     struct vo_cocoa_input_queue *input_queue;
@@ -198,7 +198,7 @@ static struct vo_cocoa_state *vo_cocoa_init_state(struct vo *vo)
         .vo_cursor_autohide_delay = vo->opts->cursor_autohide_delay,
         .power_mgmt_assertion = kIOPMNullAssertionID,
         .accumulated_scroll = 0,
-        .lock = [[NSRecursiveLock alloc] init],
+        .lock = [[NSLock alloc] init],
         .input_queue = vo_cocoa_input_queue_init(s),
     };
     if (!vo->opts->border) s->windowed_mask = NSBorderlessWindowMask;
