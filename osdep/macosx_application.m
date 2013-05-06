@@ -79,6 +79,8 @@ static NSAutoreleasePool *pool;
 {
     NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Apple Menu"];
     [self mainMenuItemWithParent:mainMenu child:menu];
+    [self menuItemWithParent:menu title:@"Hide mpv"
+                      action:@selector(hide:) keyEquivalent: @"h"];
     [self menuItemWithParent:menu title:@"Quit mpv"
                       action:@selector(stopPlayback) keyEquivalent: @"q"];
     return [menu autorelease];
