@@ -343,12 +343,12 @@ int mpv_opengl_cb_render(struct mpv_opengl_cb_context *ctx, int fbo, int vp[4])
     gl_video_unset_gl_state(ctx->renderer);
 
     pthread_mutex_lock(&ctx->lock);
-
-    if (vo && ctx->queued_frames > 0)
+    const int delay = ctx->queued_frames;
+    if (vo && delay > 0)
         update(vo->priv);
     pthread_mutex_unlock(&ctx->lock);
 
-    return 0;
+    return delay;
 }
 
 static void draw_image(struct vo *vo, mp_image_t *mpi)
