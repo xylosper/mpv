@@ -115,7 +115,7 @@ static void frame_queue_drop(struct mpv_opengl_cb_context *ctx)
     if (mpi) {
         talloc_free(mpi);
         if (ctx->active)
-            vo_increment_drop_count(ctx->active);
+            vo_increment_drop_count(ctx->active, 1);
     }
 }
 
@@ -133,7 +133,7 @@ static void frame_queue_drop_all(struct mpv_opengl_cb_context *ctx)
     int frames = ctx->queued_frames;
     frame_queue_clear(ctx);
     if (ctx->active && frames > 0)
-        vo_increment_drop_count_by(ctx->active, frames);
+        vo_increment_drop_count(ctx->active, frames);
 }
 
 static void frame_queue_push(struct mpv_opengl_cb_context *ctx, struct mp_image *mpi)
@@ -343,12 +343,12 @@ int mpv_opengl_cb_render(struct mpv_opengl_cb_context *ctx, int fbo, int vp[4])
     gl_video_unset_gl_state(ctx->renderer);
 
     pthread_mutex_lock(&ctx->lock);
-    const int delay = ctx->queued_frames;
-    if (vo && delay > 0)
+    const int left = ctx->queued_frames;
+    if (vo && left > 0)
         update(vo->priv);
     pthread_mutex_unlock(&ctx->lock);
 
-    return delay;
+    return left;
 }
 
 static void draw_image(struct vo *vo, mp_image_t *mpi)
