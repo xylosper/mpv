@@ -232,6 +232,10 @@ int mp_vdpau_mixer_render(struct mp_vdpau_mixer *mixer,
             frame->past[n] = frame->future[n] = VDP_INVALID_HANDLE;
         frame->field = VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME;
     }
+    if (video->fields & MP_IMGFIELD_TOP)
+        frame->field = VDP_VIDEO_MIXER_PICTURE_STRUCTURE_TOP_FIELD;
+    else if (video->fields & MP_IMGFIELD_BOTTOM)
+        frame->field = VDP_VIDEO_MIXER_PICTURE_STRUCTURE_BOTTOM_FIELD;
 
     if (!opts)
         opts = &frame->opts;

@@ -124,9 +124,13 @@ static int map_image(struct gl_hwdec *hw, struct mp_image *hw_image,
         return -1;
 
     va_lock(p->ctx);
+    int flags = va_get_colorspace_flag(hw_image->params.colorspace);
+    if (hw_image->fields & MP_IMGFIELD_TOP)
+        flags |= VA_TOP_FIELD;
+    else if (hw_image->fields & MP_IMGFIELD_BOTTOM)
+        flags |= VA_BOTTOM_FIELD;
     status = vaCopySurfaceGLX(p->display, p->vaglx_surface,
-                              va_surface_id(hw_image),
-                              va_get_colorspace_flag(hw_image->params.colorspace));
+                              va_surface_id(hw_image), flags);
     va_unlock(p->ctx);
     if (!CHECK_VA_STATUS(p, "vaCopySurfaceGLX()"))
         return -1;
