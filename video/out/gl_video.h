@@ -52,6 +52,7 @@ struct gl_video_opts {
     int use_rectangle;
     struct m_color background;
     char *custom_shader;
+    int vao;
 };
 
 extern const struct m_sub_options gl_video_conf;
