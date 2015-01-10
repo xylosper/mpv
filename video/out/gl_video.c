@@ -181,6 +181,9 @@ struct gl_video {
     // state for luma (0) and chroma (1) scalers
     struct scaler scalers[2];
 
+    // true if scaler is currently upscaling
+    bool upscaling;
+
     struct mp_csp_equalizer video_eq;
     struct mp_image_params image_params;
 
@@ -319,12 +322,13 @@ const struct gl_video_opts gl_video_opts_def = {
     .dither_size = 6,
     .fbo_format = GL_RGBA,
     .scale_sep = 1,
+    .sigmoid_center = 0.75,
+    .sigmoid_slope = 6.5,
     .scalers = { "bilinear", "bilinear" },
     .scaler_params = {{NAN, NAN}, {NAN, NAN}},
     .scaler_radius = {NAN, NAN},
     .alpha_mode = 2,
     .background = {0, 0, 0, 255},
-    .vao = 1,
 };
 
 const struct gl_video_opts gl_video_opts_hq_def = {
@@ -334,12 +338,14 @@ const struct gl_video_opts gl_video_opts_hq_def = {
     .fbo_format = GL_RGBA16,
     .scale_sep = 1,
     .fancy_downscaling = 1,
+    .sigmoid_center = 0.75,
+    .sigmoid_slope = 6.5,
+    .sigmoid_upscaling = 1,
     .scalers = { "spline36", "bilinear" },
     .scaler_params = {{NAN, NAN}, {NAN, NAN}},
     .scaler_radius = {NAN, NAN},
     .alpha_mode = 2,
     .background = {0, 0, 0, 255},
-    .vao = 1,
 };
 
 static int validate_scaler_opt(struct mp_log *log, const m_option_t *opt,
@@ -366,6 +372,9 @@ const struct m_sub_options gl_video_conf = {
         OPT_FLOATRANGE("cradius", scaler_radius[1], 0, 1.0, 32.0),
         OPT_FLAG("scaler-resizes-only", scaler_resizes_only, 0),
         OPT_FLAG("fancy-downscaling", fancy_downscaling, 0),
+        OPT_FLAG("sigmoid-upscaling", sigmoid_upscaling, 0),
+        OPT_FLOATRANGE("sigmoid-center", sigmoid_center, 0, 0.0, 1.0),
+        OPT_FLOATRANGE("sigmoid-slope", sigmoid_slope, 0, 1.0, 20.0),
         OPT_FLAG("indirect", indirect, 0),
         OPT_FLAG("scale-sep", scale_sep, 0),
         OPT_CHOICE("fbo-format", fbo_format, 0,
@@ -398,7 +407,6 @@ const struct m_sub_options gl_video_conf = {
         OPT_FLAG("rectangle-textures", use_rectangle, 0),
         OPT_COLOR("background", background, 0),
         OPT_STRING("custom-shader", custom_shader, 0),
-        OPT_FLAG("vao", vao, 0),
         {0}
     },
     .size = sizeof(struct gl_video_opts),
@@ -409,11 +417,7 @@ static void uninit_rendering(struct gl_video *p);
 static void delete_shaders(struct gl_video *p);
 static void check_gl_features(struct gl_video *p);
 static bool init_format(int fmt, struct gl_video *init);
-
-static bool use_vao(struct gl_video *p)
-{
-    return p->opts.vao && p->gl->BindVertexArray;
-}
+static double get_scale_factor(struct gl_video *p);
 
 static const struct fmt_entry *find_tex_format(GL *gl, int bytes_per_comp,
                                                int n_channels)
@@ -506,12 +510,12 @@ static void draw_triangles(struct gl_video *p, struct vertex *vb, int vert_count
                    GL_DYNAMIC_DRAW);
     gl->BindBuffer(GL_ARRAY_BUFFER, 0);
 
-    if (use_vao(p))
+    if (gl->BindVertexArray)
         gl->BindVertexArray(p->vao);
 
     gl->DrawArrays(GL_TRIANGLES, 0, vert_count);
 
-    if (use_vao(p))
+    if (gl->BindVertexArray)
         gl->BindVertexArray(0);
 
     debug_check_gl(p, "after rendering");
@@ -691,6 +695,21 @@ static void update_uniforms(struct gl_video *p, GLuint program)
 
     gl->Uniform1f(gl->GetUniformLocation(program, "conv_gamma"),
                   p->conv_gamma);
+
+    // Coefficients for the sigmoidal transform are taken from the
+    // formula here: http://www.imagemagick.org/Usage/color_mods/#sigmoidal
+    float sig_center = p->opts.sigmoid_center;
+    float sig_slope = p->opts.sigmoid_slope;
+
+    // This function needs to go through (0,0) and (1,1) so we compute the
+    // values at 1 and 0, and then scale/shift them, respectively.
+    float sig_offset = 1.0/(1+expf(sig_slope * sig_center));
+    float sig_scale  = 1.0/(1+expf(sig_slope * (sig_center-1))) - sig_offset;
+
+    gl->Uniform1f(gl->GetUniformLocation(program, "sig_center"), sig_center);
+    gl->Uniform1f(gl->GetUniformLocation(program, "sig_slope"), sig_slope);
+    gl->Uniform1f(gl->GetUniformLocation(program, "sig_scale"), sig_scale);
+    gl->Uniform1f(gl->GetUniformLocation(program, "sig_offset"), sig_offset);
 
     float gamma = p->opts.gamma ? p->opts.gamma : 1.0;
     gl->Uniform3f(gl->GetUniformLocation(program, "inv_gamma"),
@@ -1043,6 +1062,12 @@ static void compile_shaders(struct gl_video *p)
         gamma_fun = MP_CSP_TRC_BT_2020_EXACT;
     }
 
+    bool use_linear_light = gamma_fun != MP_CSP_TRC_NONE || p->is_linear_rgb;
+
+    // Optionally transform to sigmoidal color space if requested, but only
+    // when upscaling in linear light
+    bool use_sigmoid = p->opts.sigmoid_upscaling && use_linear_light && p->upscaling;
+
     // Figure out the right color spaces we need to convert, if any
     enum mp_csp_prim prim_src = p->image_params.primaries, prim_dest;
     if (use_cms) {
@@ -1123,6 +1148,7 @@ static void compile_shaders(struct gl_video *p)
                    gamma_fun == MP_CSP_TRC_BT_2020_EXACT);
     shader_def_opt(&header_conv, "USE_LINEAR_LIGHT_SRGB",
                    gamma_fun == MP_CSP_TRC_SRGB);
+    shader_def_opt(&header_conv, "USE_SIGMOID", use_sigmoid);
     if (p->opts.alpha_mode > 0 && p->has_alpha && p->plane_count > 3)
         shader_def(&header_conv, "USE_ALPHA_PLANE", "3");
     if (p->opts.alpha_mode == 2 && p->has_alpha)
@@ -1132,6 +1158,7 @@ static void compile_shaders(struct gl_video *p)
         header_conv = talloc_asprintf_append(header_conv, "%s\n", p->opts.custom_shader);
     }
 
+    shader_def_opt(&header_final, "USE_SIGMOID_INV", use_sigmoid);
     shader_def_opt(&header_final, "USE_GAMMA_POW", p->opts.gamma > 0);
     shader_def_opt(&header_final, "USE_CMS_MATRIX", use_cms_matrix);
     shader_def_opt(&header_final, "USE_3DLUT", p->use_lut_3d);
@@ -1159,7 +1186,7 @@ static void compile_shaders(struct gl_video *p)
 
     // Don't sample from input video textures before converting the input to
     // linear light.
-    if (use_input_gamma || use_conv_gamma || gamma_fun != MP_CSP_TRC_NONE)
+    if (use_input_gamma || use_conv_gamma || use_linear_light)
         use_indirect = true;
 
     // It doesn't make sense to scale the chroma with cscale in the 1. scale
@@ -1862,6 +1889,12 @@ static void check_resize(struct gl_video *p)
         if (strcmp(p->scalers[n].name, expected_scaler(p, n)) != 0)
             need_scaler_reinit = true;
     }
+    if (p->upscaling != (get_scale_factor(p) > 1.0)) {
+        p->upscaling = !p->upscaling;
+        // Switching between upscaling and downscaling also requires sigmoid
+        // to be toggled
+        need_scaler_reinit |= p->opts.sigmoid_upscaling;
+    }
     if (need_scaler_reinit) {
         reinit_rendering(p);
     } else if (need_scaler_update) {
@@ -2260,7 +2293,7 @@ static int init_gl(struct gl_video *p)
     gl->GenBuffers(1, &p->vertex_buffer);
     gl->BindBuffer(GL_ARRAY_BUFFER, p->vertex_buffer);
 
-    if (use_vao(p)) {
+    if (gl->BindVertexArray) {
         gl->GenVertexArrays(1, &p->vao);
         gl->BindVertexArray(p->vao);
         setup_vertex_array(gl);
@@ -2335,7 +2368,7 @@ void gl_video_set_gl_state(struct gl_video *p)
     gl->PixelStorei(GL_PACK_ALIGNMENT, 4);
     gl->PixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
-    if (!use_vao(p)) {
+    if (!gl->BindVertexArray) {
         gl->BindBuffer(GL_ARRAY_BUFFER, p->vertex_buffer);
         setup_vertex_array(gl);
         gl->BindBuffer(GL_ARRAY_BUFFER, 0);
@@ -2346,7 +2379,7 @@ void gl_video_unset_gl_state(struct gl_video *p)
 {
     GL *gl = p->gl;
 
-    if (!use_vao(p)) {
+    if (!gl->BindVertexArray) {
         gl->DisableVertexAttribArray(VERTEX_ATTRIB_POSITION);
         gl->DisableVertexAttribArray(VERTEX_ATTRIB_COLOR);
         gl->DisableVertexAttribArray(VERTEX_ATTRIB_TEXCOORD);
