@@ -1446,15 +1446,16 @@ Window
 ------
 
 ``--title=<string>``
-    Set the window title. Properties are expanded on playback start.
-    (See `Property Expansion`_.)
+    Set the window title. This is used for the video window, and if possible,
+    also sets the audio stream title.
+
+    Properties are expanded. (See `Property Expansion`_.)
 
     .. warning::
 
         There is a danger of this causing significant CPU usage, depending on
-        the properties used and the window manager. Changing the window title
-        is often a slow operation, and if the title changes every frame,
-        playback can be ruined.
+        the properties used. Changing the window title is often a slow
+        operation, and if the title changes every frame, playback can be ruined.
 
 ``--screen=<default|0-32>``
     In multi-monitor configurations (i.e. a single desktop that spans across
@@ -2304,7 +2305,7 @@ Input
 
 ``--input-vo-keyboard=<yes|no>``
     Disable all keyboard input on for VOs which can't participate in proper
-    keyboard input dispatching. This currently affects X11. Generally useful for
+    keyboard input dispatching. May not affect all VOs. Generally useful for
     embedding only.
 
     On X11, a sub-window with input enabled grabs all keyboard input as long
@@ -2316,11 +2317,14 @@ Input
     behavior, but naively embedding foreign windows breaks it.
 
     The only way to handle this reasonably is using the XEmbed protocol, which
-    was designed to solve these problems. But Qt has questionable support, and
-    mpv doesn't implement it yet.
+    was designed to solve these problems. GTK provides ``GtkSocket``, which
+    supports XEmbed. Qt doesn't seem to provide anything working in newer
+    versions.
 
-    As a workaround, this option is disabled by default in libmpv. (Note that
-    ``input-default-bindings`` is disabled by default in libmpv as well.)
+    If the embedder supports XEmbed, input should work with default settings
+    and with this option disabled. Note that ``input-default-bindings`` is
+    disabled by default in libmpv as well - it should be enabled if you want
+    the mpv default key bindings.
 
     (This option was renamed from ``--input-x11-keyboard``.)
 
@@ -3217,7 +3221,8 @@ Miscellaneous
 ``--display-tags=tag1,tags2,...``
     Set the list of tags that should be displayed on the terminal. Tags that
     are in the list, but are not present in the played file, will not be shown.
-    The special value ``all`` disables filtering.
+    If a value ends with ``*``, all tags are matched by prefix (though there
+    is no general globbing). Just passing ``*`` essentially filtering.
 
     The default includes a common list of tags, call mpv with ``--list-options``
     to see it.

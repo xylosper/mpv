@@ -15,6 +15,9 @@
  * with mpv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <stddef.h>
+#include <limits.h>
+#include <strings.h>
 #include <libavutil/dict.h>
 #include "tags.h"
 #include "misc/bstr.h"
@@ -29,15 +32,15 @@ void mp_tags_set_bstr(struct mp_tags *tags, bstr key, bstr value)
     for (int n = 0; n < tags->num_keys; n++) {
         if (bstrcasecmp0(key, tags->keys[n]) == 0) {
             talloc_free(tags->values[n]);
-            tags->values[n] = talloc_strndup(tags, value.start, value.len);
+            tags->values[n] = bstrto0(tags, value);
             return;
         }
     }
 
     MP_RESIZE_ARRAY(tags, tags->keys,   tags->num_keys + 1);
     MP_RESIZE_ARRAY(tags, tags->values, tags->num_keys + 1);
-    tags->keys[tags->num_keys]   = talloc_strndup(tags, key.start,   key.len);
-    tags->values[tags->num_keys] = talloc_strndup(tags, value.start, value.len);
+    tags->keys[tags->num_keys]   = bstrto0(tags, key);
+    tags->values[tags->num_keys] = bstrto0(tags, value);
     tags->num_keys++;
 }
 
@@ -76,19 +79,25 @@ struct mp_tags *mp_tags_dup(void *tparent, struct mp_tags *tags)
 
 // Return a copy of the tags, but containing only keys in list. Also forces
 // the order and casing of the keys (for cosmetic reasons).
-// The special key "all" matches all keys.
+// A trailing '*' matches the rest.
 struct mp_tags *mp_tags_filtered(void *tparent, struct mp_tags *tags, char **list)
 {
     struct mp_tags *new = talloc_zero(tparent, struct mp_tags);
     for (int n = 0; list && list[n]; n++) {
         char *key = list[n];
-        if (strcasecmp(key, "all") == 0) {
-            talloc_free(new);
-            return mp_tags_dup(tparent, tags);
+        size_t keylen = strlen(key);
+        if (keylen >= INT_MAX)
+            continue;
+        bool prefix = keylen && key[keylen - 1] == '*';
+        int matchlen = prefix ? keylen - 1 : keylen + 1;
+        for (int x = 0; x < tags->num_keys; x++) {
+            if (strncasecmp(tags->keys[x], key, matchlen) == 0) {
+                char skey[320];
+                snprintf(skey, sizeof(skey), "%.*s%s", matchlen, key,
+                         prefix ? tags->keys[x] + keylen - 1 : "");
+                mp_tags_set_str(new, skey, tags->values[x]);
+            }
         }
-        char *value = mp_tags_get_str(tags, key);
-        if (value)
-            mp_tags_set_str(new, key, value);
     }
     return new;
 }
