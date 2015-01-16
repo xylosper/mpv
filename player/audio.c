@@ -460,8 +460,7 @@ static void do_fill_audio_out_buffers(struct MPContext *mpctx, double endpts)
             mpctx->d_audio->init_retries += 1;
             if (mpctx->d_audio->init_retries >= 50) {
                 MP_ERR(mpctx, "Error initializing audio.\n");
-                struct track *track = mpctx->current_track[0][STREAM_AUDIO];
-                mp_deselect_track(mpctx, track);
+                error_on_track(mpctx, mpctx->current_track[0][STREAM_AUDIO]);
                 return;
             }
         }
@@ -508,6 +507,8 @@ static void do_fill_audio_out_buffers(struct MPContext *mpctx, double endpts)
             mpctx->sleeptime = 0;
             return; // retry on next iteration
         }
+        if (status == AD_ERR)
+            mpctx->sleeptime = 0;
     }
 
     // If EOF was reached before, but now something can be decoded, try to

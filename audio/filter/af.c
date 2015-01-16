@@ -513,6 +513,7 @@ static int af_reinit(struct af_stream *s)
 {
     remove_auto_inserted_filters(s);
     af_chain_forget_frames(s);
+    s->first->fmt_in = s->first->fmt_out = s->input;
     // Start with the second filter, as the first filter is the special input
     // filter which needs no initialization.
     struct af_instance *af = s->first->next;
@@ -774,7 +775,7 @@ void af_control_all(struct af_stream *s, int cmd, void *arg)
 void af_add_output_frame(struct af_instance *af, struct mp_audio *frame)
 {
     if (frame) {
-        assert(mp_audio_config_equals(af->data, frame));
+        assert(mp_audio_config_equals(&af->fmt_out, frame));
         MP_TARRAY_APPEND(af, af->out_queued, af->num_out_queued, frame);
     }
 }
@@ -800,43 +801,9 @@ static struct mp_audio *af_dequeue_output_frame(struct af_instance *af)
 
 static int af_do_filter(struct af_instance *af, struct mp_audio *frame)
 {
-    int r = 0;
-    if (af->filter_frame) {
-        r = af->filter_frame(af, frame);
-        frame = NULL;
-    } else {
-        // Compatibility path.
-        int flags = 0;
-        struct mp_audio input;
-        char dummy[MP_NUM_CHANNELS];
-        if (frame) {
-            // We don't know if the filter will write; but it might possibly.
-            r = mp_audio_make_writeable(frame);
-            input = *frame;
-            // Don't give it a refcounted frame
-            for (int n = 0; n < MP_NUM_CHANNELS; n++)
-                input.allocated[n] = NULL;
-        } else {
-            input = af->fmt_in;
-            mp_audio_set_null_data(&input);
-            flags = AF_FILTER_FLAG_EOF;
-            for (int n = 0; n < MP_NUM_CHANNELS; n++)
-                input.planes[n] = &dummy[n];
-        }
-        if (r < 0)
-            goto done;
-        r = af->filter(af, &input, flags);
-        if (input.samples) {
-            struct mp_audio *new = mp_audio_pool_new_copy(af->out_pool, &input);
-            if (!new) {
-                r = -1;
-                goto done;
-            }
-            af_add_output_frame(af, new);
-        }
-    }
-done:
-    talloc_free(frame);
+    if (frame)
+        assert(mp_audio_config_equals(&af->fmt_in, frame));
+    int r = af->filter_frame(af, frame);
     if (r < 0)
         MP_ERR(af, "Error filtering frame.\n");
     return r;
