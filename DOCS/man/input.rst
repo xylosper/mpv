@@ -1119,6 +1119,17 @@ Property list
     Note that you don't know the success of the operation immediately after
     writing this property. It happens with a delay as video is reinitialized.
 
+``detected-hwdec``
+    Return the current hardware decoder that was detected and opened. Returns
+    the same values as ``hwdec``.
+
+    This is known only once the VO has opened (and possibly later). With some
+    VOs (like ``opengl``), this is never known in advance, but only when the
+    decoder attempted to create the hw decoder successfully. Also, hw decoders
+    with ``-copy`` suffix are returned only while hw decoding is active (and
+    unset afterwards). All this reflects how detecting hw decoders are
+    detected and used internally in mpv.
+
 ``panscan`` (RW)
     See ``--panscan``.
 
@@ -1480,6 +1491,14 @@ Property list
 ``seekable``
     Return whether it's generally possible to seek in the current file.
 
+``partially-seekable``
+    Return ``yes`` if the current file is considered seekable, but only because
+    the cache is active. This means small relative seeks may be fine, but larger
+    seeks may fail anyway. Whether a seek will succeed or not is generally not
+    known in advance.
+
+    If this property returns true, ``seekable`` will also return true.
+
 ``playback-abort``
     Return whether playback is stopped or is to be stopped. (Useful in obscure
     situations like during ``on_load`` hook processing, when the user can
@@ -1563,6 +1582,16 @@ Property list
     This property also doesn't tell you which audio device is actually in use.
 
     How these details are handled may change in the future.
+
+``current-vo``
+    Current video output driver (name as used with ``--vo``).
+
+``current-ao``
+    Current audio output driver (name as used with ``--ao``).
+
+``audio-out-detected-device``
+    Return the audio device selected by the AO driver (only implemented for
+    some drivers: currently only ``coreaudio``).
 
 ``mpv-version``
     Return the mpv version/copyright string. Depending on how the binary was

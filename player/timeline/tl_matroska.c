@@ -281,7 +281,7 @@ static int find_ordered_chapter_sources(struct MPContext *mpctx,
             MP_INFO(mpctx, "Will scan other files in the "
                     "same directory to find referenced sources.\n");
             filenames = find_files(main_filename);
-            num_filenames = MP_TALLOC_ELEMS(filenames);
+            num_filenames = MP_TALLOC_AVAIL(filenames);
             talloc_steal(tmp, filenames);
         }
         // Possibly get further segments appended to the first segment
@@ -294,7 +294,7 @@ static int find_ordered_chapter_sources(struct MPContext *mpctx,
         for (int i = 0; i < num_filenames; i++) {
             if (!missing(*sources, *num_sources))
                 break;
-            MP_INFO(mpctx, "Checking file %s\n", filenames[i]);
+            MP_VERBOSE(mpctx, "Checking file %s\n", filenames[i]);
             check_file(mpctx, sources, num_sources, uids, filenames[i], 0);
         }
     } while (old_source_count != *num_sources);

@@ -163,6 +163,7 @@ uniform VIDEO_SAMPLER texture3;
 uniform vec2 textures_size[4];
 uniform vec2 chroma_center_offset;
 uniform vec2 chroma_div;
+uniform vec2 chroma_fix;
 uniform sampler2D lut_2d_c;
 uniform sampler2D lut_2d_l;
 #if HAVE_1DTEX
@@ -304,7 +305,7 @@ float[6] weights6(sampler2D lookup, float f) {
         w = texture1D(LUT, length(vec2(X, Y) - fcoord)/R).r;                \
         c = texture(tex, base + pt * vec2(X, Y));                           \
         wsum += w;                                                          \
-        res  += w * c;                                                      \
+        res  += vec4(w) * c;                                                \
 
 #define SAMPLE_POLAR_PRIMARY(LUT, R, X, Y)                                  \
         SAMPLE_POLAR_HELPER(LUT, R, X, Y)                                   \
@@ -323,7 +324,7 @@ float[6] weights6(sampler2D lookup, float f) {
         float w;                                                            \
         vec4 c;                                                             \
         WEIGHTS_FN(LUT);                                                    \
-        res /= wsum;                                                        \
+        res = res / vec4(wsum);                                             \
         return mix(res, clamp(res, lo, hi), ANTIRING);                      \
     }
 
@@ -365,6 +366,9 @@ vec4 sample_sharpen5(VIDEO_SAMPLER tex, vec2 texsize, vec2 texcoord, float param
 
 void main() {
     vec2 chr_texcoord = texcoord;
+#ifdef USE_CHROMA_FIX
+    chr_texcoord = chr_texcoord * chroma_fix;
+#endif
 #ifdef USE_RECTANGLE
     chr_texcoord = chr_texcoord * chroma_div;
 #else

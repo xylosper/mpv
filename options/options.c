@@ -109,6 +109,7 @@ const m_option_t mp_opts[] = {
                 .type = &m_option_type_msglevels),
     OPT_STRING("dump-stats", dump_stats, CONF_GLOBAL | CONF_PRE_PARSE),
     OPT_FLAG("msg-color", msg_color, CONF_GLOBAL | CONF_PRE_PARSE),
+    OPT_STRING("log-file", log_file, CONF_GLOBAL | CONF_PRE_PARSE),
     OPT_FLAG("msg-module", msg_module, CONF_GLOBAL),
     OPT_FLAG("msg-time", msg_time, CONF_GLOBAL),
 #ifdef _WIN32
@@ -326,6 +327,8 @@ const m_option_t mp_opts[] = {
     OPT_FLAG("stretch-dvd-subs", stretch_dvd_subs, 0),
     OPT_FLAG("sub-fix-timing", sub_fix_timing, 0),
     OPT_CHOICE("sub-auto", sub_auto, 0,
+               ({"no", -1}, {"exact", 0}, {"fuzzy", 1}, {"all", 2})),
+    OPT_CHOICE("audio-file-auto", audiofile_auto, 0,
                ({"no", -1}, {"exact", 0}, {"fuzzy", 1}, {"all", 2})),
     OPT_INTRANGE("sub-pos", sub_pos, 0, 0, 100),
     OPT_FLOATRANGE("sub-gauss", sub_gauss, 0, 0.0, 3.0),
@@ -729,6 +732,7 @@ const struct MPOpts mp_default_opts = {
     .demuxer_min_bytes = 0,
     .demuxer_min_secs = 0.2,
     .network_rtsp_transport = 2,
+    .hls_bitrate = 2,
     .demuxer_min_secs_cache = 2,
     .cache_pausing = 1,
     .chapterrange = {-1, -1},
@@ -762,6 +766,7 @@ const struct MPOpts mp_default_opts = {
     .movie_aspect = -1.,
     .field_dominance = -1,
     .sub_auto = 0,
+    .audiofile_auto = -1,
     .osd_bar_visible = 1,
 #if HAVE_LIBASS
     .ass_enabled = 1,
@@ -776,6 +781,7 @@ const struct MPOpts mp_default_opts = {
     .sub_fix_timing = 1,
     .sub_cp = "auto",
     .mkv_subtitle_preroll_secs = 1.0,
+    .screenshot_template = "shot%n",
 
     .hwdec_codecs = "h264,vc1,wmv3",
 
