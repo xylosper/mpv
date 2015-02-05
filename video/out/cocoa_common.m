@@ -62,6 +62,7 @@ struct vo_cocoa_state {
 
     NSScreen *current_screen;
     NSScreen *fs_screen;
+    double screen_fps;
 
     NSInteger window_level;
 
@@ -256,6 +257,30 @@ static void vo_cocoa_update_screens_pointers(struct vo *vo)
     get_screen_handle(vo, opts->fsscreen_id, s->window, &s->fs_screen);
 }
 
+static void vo_cocoa_update_screen_fps(struct vo *vo)
+{
+    struct vo_cocoa_state *s = vo->cocoa;
+    NSScreen *screen = vo->opts->fullscreen ? s->fs_screen : s->current_screen;
+    NSDictionary* sinfo = [screen deviceDescription];
+    NSNumber* sid = [sinfo objectForKey:@"NSScreenNumber"];
+    CGDirectDisplayID did = [sid longValue];
+    CGDisplayModeRef mode = CGDisplayCopyDisplayMode(did);
+    s->screen_fps = CGDisplayModeGetRefreshRate(mode);
+    CGDisplayModeRelease(mode);
+
+    if (s->screen_fps == 0.0) {
+        // Fallback to using Nominal refresh rate from DisplayLink,
+        // CVDisplayLinkGet *Actual* OutputVideoRefreshPeriod seems to
+        // return 0 as well if CG returns 0
+        CVDisplayLinkRef link;
+        CVDisplayLinkCreateWithCGDisplay(did, &link);
+        const CVTime t = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(link);
+        if (!(t.flags & kCVTimeIsIndefinite))
+            s->screen_fps = (t.timeScale / (double) t.timeValue);
+        CVDisplayLinkRelease(link);
+    }
+}
+
 static void vo_cocoa_update_screen_info(struct vo *vo, struct mp_rect *out_rc)
 {
     struct vo_cocoa_state *s = vo->cocoa;
@@ -264,6 +289,7 @@ static void vo_cocoa_update_screen_info(struct vo *vo, struct mp_rect *out_rc)
         return;
 
     vo_cocoa_update_screens_pointers(vo);
+    vo_cocoa_update_screen_fps(vo);
 
     if (out_rc) {
         NSRect r = [s->current_screen frame];
@@ -649,6 +675,11 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
     case VOCTRL_GET_ICC_PROFILE:
         vo_cocoa_control_get_icc_profile(vo, arg);
         return VO_TRUE;
+    case VOCTRL_GET_DISPLAY_FPS:
+        if (vo->cocoa->screen_fps > 0.0) {
+            *(double *)arg = vo->cocoa->screen_fps;
+            return VO_TRUE;
+        }
     }
     return VO_NOTIMPL;
 }

@@ -1801,7 +1801,7 @@ static bool parse_geometry_str(struct m_geometry *gm, bstr s)
     if (s.len == 0)
         return true;
     // Approximate grammar:
-    // [W[xH]][{+-}X{+-}Y] | [X:Y]
+    // [[W][xH]][{+-}X{+-}Y] | [X:Y]
     // (meaning: [optional] {one character of} one|alternative)
     // Every number can be followed by '%'
     int num;
@@ -1825,7 +1825,8 @@ static bool parse_geometry_str(struct m_geometry *gm, bstr s)
     if (bstrchr(s, ':') < 0) {
         gm->wh_valid = true;
         if (!bstr_startswith0(s, "+") && !bstr_startswith0(s, "-")) {
-            READ_NUM(w, w_per);
+            if (!bstr_startswith0(s, "x"))
+                READ_NUM(w, w_per);
             if (bstr_eatstart0(&s, "x"))
                 READ_NUM(h, h_per);
         }
@@ -2757,10 +2758,7 @@ static int parse_obj_settings_list(struct mp_log *log, const m_option_t *opt,
     assert(opt->priv);
 
     if (bstr_endswith0(bstr0(opt->name), "*")) {
-		int opt_name_len = strlen(opt->name) - 1 ;
-		if (bstr_startswith0(name, "options/"))
-			opt_name_len += strlen("options/");
-		struct bstr suffix = bstr_cut(name, opt_name_len);
+        struct bstr suffix = bstr_cut(name, strlen(opt->name) - 1);
         if (bstrcmp0(suffix, "-add") == 0)
             op = OP_ADD;
         else if (bstrcmp0(suffix, "-set") == 0)
@@ -2777,7 +2775,8 @@ static int parse_obj_settings_list(struct mp_log *log, const m_option_t *opt,
             op = OP_NONE;
         else {
             char pre[80];
-			snprintf(pre, sizeof(pre), "%.*s", opt_name_len, opt->name);
+            snprintf(pre, sizeof(pre), "%.*s", (int)(strlen(opt->name) - 1),
+                     opt->name);
             mp_err(log, "Option %.*s: unknown postfix %.*s\n"
                    "Supported postfixes are:\n"
                    "  %s-set\n"

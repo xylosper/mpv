@@ -282,8 +282,6 @@ static bool timeline_set_part(struct MPContext *mpctx, int i, bool initial)
     uninit_audio_chain(mpctx);
     uninit_video_chain(mpctx);
     uninit_sub_all(mpctx);
-    if (!mpctx->opts->fixed_vo)
-        uninit_video_out(mpctx);
     if (mpctx->ao && !mpctx->opts->gapless_audio) {
         ao_drain(mpctx->ao);
         uninit_audio_out(mpctx);
@@ -533,7 +531,7 @@ void mp_switch_track_n(struct MPContext *mpctx, int order, enum stream_type type
     if (order == 0) {
         if (type == STREAM_VIDEO) {
             uninit_video_chain(mpctx);
-            if (!mpctx->opts->fixed_vo || !track)
+            if (!track)
                 handle_force_window(mpctx, false);
         } else if (type == STREAM_AUDIO) {
             clear_audio_output_buffers(mpctx);
@@ -646,8 +644,8 @@ bool mp_remove_track(struct MPContext *mpctx, struct track *track)
     return true;
 }
 
-static struct track *open_external_file(struct MPContext *mpctx, char *filename,
-                                        enum stream_type filter)
+struct track *mp_add_external_file(struct MPContext *mpctx, char *filename,
+                                   enum stream_type filter)
 {
     struct MPOpts *opts = mpctx->opts;
     if (!filename)
@@ -714,34 +712,14 @@ static void open_audiofiles_from_options(struct MPContext *mpctx)
 {
     struct MPOpts *opts = mpctx->opts;
     for (int n = 0; opts->audio_files && opts->audio_files[n]; n++)
-        open_external_file(mpctx, opts->audio_files[n], STREAM_AUDIO);
-}
-
-struct track *mp_add_track_file(struct MPContext *mpctx, char *filename, int type)
-{
-    if (type == STREAM_AUDIO)
-        return mp_add_audio(mpctx, filename);
-    if (type == STREAM_SUB)
-        return mp_add_subtitles(mpctx, filename);
-    return NULL;
-}
-
-struct track *mp_add_audio(struct MPContext *mpctx, char *filename)
-{
-    struct MPOpts *opts = mpctx->opts;
-    return open_external_file(mpctx, filename, STREAM_AUDIO);
-}
-
-struct track *mp_add_subtitles(struct MPContext *mpctx, char *filename)
-{
-    return open_external_file(mpctx, filename, STREAM_SUB);
+        mp_add_external_file(mpctx, opts->audio_files[n], STREAM_AUDIO);
 }
 
 static void open_subtitles_from_options(struct MPContext *mpctx)
 {
     struct MPOpts *opts = mpctx->opts;
     for (int i = 0; opts->sub_name && opts->sub_name[i] != NULL; i++)
-        mp_add_subtitles(mpctx, opts->sub_name[i]);
+        mp_add_external_file(mpctx, opts->sub_name[i], STREAM_SUB);
 }
 
 static void autoload_external_files(struct MPContext *mpctx)
@@ -766,7 +744,7 @@ static void autoload_external_files(struct MPContext *mpctx)
             if (strcmp(mpctx->sources[n]->stream->url, filename) == 0)
                 goto skip;
         }
-        struct track *track = open_external_file(mpctx, filename, list[i].type);
+        struct track *track = mp_add_external_file(mpctx, filename, list[i].type);
         if (track) {
             track->auto_loaded = true;
             if (!track->lang)
@@ -812,11 +790,12 @@ static void transfer_playlist(struct MPContext *mpctx, struct playlist *pl)
     }
 }
 
-static int process_hooks(struct MPContext *mpctx, char *hook)
+static int process_open_hooks(struct MPContext *mpctx)
 {
-    mp_hook_run(mpctx, NULL, hook);
 
-    while (!mp_hook_test_completion(mpctx, hook)) {
+    mp_hook_run(mpctx, NULL, "on_load");
+
+    while (!mp_hook_test_completion(mpctx, "on_load")) {
         mp_idle(mpctx);
         if (mpctx->stop_play) {
             // Can't exit immediately, the script would interfere with the
@@ -829,10 +808,12 @@ static int process_hooks(struct MPContext *mpctx, char *hook)
     return 0;
 }
 
-
-static int process_open_hooks(struct MPContext *mpctx)
+static void process_unload_hooks(struct MPContext *mpctx)
 {
-    return process_hooks(mpctx, "on_load");
+    mp_hook_run(mpctx, NULL, "on_unload");
+
+    while (!mp_hook_test_completion(mpctx, "on_unload"))
+        mp_idle(mpctx);
 }
 
 static void print_timeline(struct MPContext *mpctx)
@@ -1086,6 +1067,8 @@ goto_reopen_demuxer: ;
         goto terminate_playback;
     }
 
+    mpctx->track_layout = mpctx->demuxer;
+
     if (mpctx->demuxer->matroska_data.ordered_chapters)
         build_ordered_chapter_timeline(mpctx);
 
@@ -1097,20 +1080,6 @@ goto_reopen_demuxer: ;
 
     print_timeline(mpctx);
     load_chapters(mpctx);
-
-    mpctx->track_layout = mpctx->demuxer;
-    if (mpctx->timeline) {
-        // With Matroska, the "master" file usually dictates track layout etc.
-        // On the contrary, the EDL and CUE demuxers are empty wrappers, as
-        // well as Matroska ordered chapter playlist-like files.
-        mpctx->track_layout = mpctx->timeline[0].source;
-        for (int n = 0; n < mpctx->num_timeline_parts; n++) {
-            if (mpctx->timeline[n].source == mpctx->demuxer) {
-                mpctx->track_layout = mpctx->demuxer;
-                break;
-            }
-        }
-    }
     add_demuxer_tracks(mpctx, mpctx->track_layout);
 
     mpctx->timeline_part = 0;
@@ -1239,8 +1208,8 @@ terminate_playback:
         goto goto_reopen_demuxer;
     }
 
-    process_hooks(mpctx, "on_finish");
-    
+    process_unload_hooks(mpctx);
+
     mp_nav_destroy(mpctx);
 
     if (mpctx->stop_play == KEEP_PLAYING)
@@ -1263,8 +1232,6 @@ terminate_playback:
     uninit_sub_renderer(mpctx);
     uninit_demuxer(mpctx);
     uninit_stream(mpctx);
-    if (!opts->fixed_vo)
-        uninit_video_out(mpctx);
     if (!opts->gapless_audio && !mpctx->encode_lavc_ctx)
         uninit_audio_out(mpctx);
 

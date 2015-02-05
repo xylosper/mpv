@@ -504,13 +504,19 @@ Available video output drivers are:
         rgb32f, rgba12, rgba16, rgba16f, rgba32f.
         Default: rgba.
 
-    ``gamma=<0.0..10.0>``
-        Set a gamma value. If gamma is adjusted in other ways (like with
-        the ``--gamma`` option or key bindings and the ``gamma`` property), the
-        value is multiplied with the other gamma value.
+    ``gamma=<0.1..2.0>``
+        Set a gamma value (default: 1.0). If gamma is adjusted in other ways
+        (like with the ``--gamma`` option or key bindings and the ``gamma``
+        property), the value is multiplied with the other gamma value.
 
-        Setting this value to 1.0 can be used to always enable gamma control.
-        (Disables delayed enabling.)
+        Recommended values based on the environmental brightness:
+
+        1.0
+            Brightly illuminated (default)
+        0.9
+            Slightly dim
+        0.8
+            Pitch black room
 
     ``icc-profile=<file>``
         Load an ICC profile and use it to transform linear RGB to screen output.
@@ -551,7 +557,7 @@ Available video output drivers are:
         Sizes must be a power of two, and 512 at most.
 
     ``alpha=<blend|yes|no>``
-        Decides what to do if the input has an alpha component (default: blend).
+        Decides what to do if the input has an alpha component (default: no).
 
         blend
             Blend the frame against a black background.
@@ -594,8 +600,8 @@ Available video output drivers are:
         can lead to bad results. If the framerate is close to or over the
         display refresh rate, results can be bad as well.
 
-        .. note:: On systems other than Linux, you currently must set the
-                  ``--display-fps`` option, or the results will be bad.
+        .. note:: On systems other than Linux or OS X, you currently must set
+                  the ``--display-fps`` option, or the results will be bad.
 
     ``smoothmotion-threshold=<0.0-0.5>``
         Mix threshold at which interpolation is skipped (default: 0.0 – never

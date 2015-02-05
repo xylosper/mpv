@@ -4571,7 +4571,7 @@ int run_command(MPContext *mpctx, mp_cmd_t *cmd)
                 return 0;
             }
         }
-        struct track *t = mp_add_track_file(mpctx, cmd->args[0].v.s, type);
+        struct track *t = mp_add_external_file(mpctx, cmd->args[0].v.s, type);
         if (!t)
             return -1;
         if (cmd->args[1].v.i == 1) {
@@ -4604,7 +4604,8 @@ int run_command(MPContext *mpctx, mp_cmd_t *cmd)
         int type = cmd->id == MP_CMD_SUB_RELOAD ? STREAM_SUB : STREAM_AUDIO;
         struct track *t = mp_track_by_tid(mpctx, type, cmd->args[0].v.i);
         if (t && t->is_external && t->external_filename) {
-            struct track *nt = mp_add_track_file(mpctx, t->external_filename, type);
+            struct track *nt = mp_add_external_file(mpctx, t->external_filename,
+                                                    type);
             if (nt) {
                 mp_remove_track(mpctx, t);
                 mp_switch_track(mpctx, nt->type, nt);
