@@ -116,11 +116,11 @@ const struct m_sub_options vd_lavc_conf = {
     },
 };
 
-const struct vd_lavc_hwdec mp_vd_lavc_vdpau;
-const struct vd_lavc_hwdec mp_vd_lavc_vda;
-const struct vd_lavc_hwdec mp_vd_lavc_vaapi;
-const struct vd_lavc_hwdec mp_vd_lavc_vaapi_copy;
-const struct vd_lavc_hwdec mp_vd_lavc_dxva2_copy;
+extern const struct vd_lavc_hwdec mp_vd_lavc_vdpau;
+extern const struct vd_lavc_hwdec mp_vd_lavc_vda;
+extern const struct vd_lavc_hwdec mp_vd_lavc_vaapi;
+extern const struct vd_lavc_hwdec mp_vd_lavc_vaapi_copy;
+extern const struct vd_lavc_hwdec mp_vd_lavc_dxva2_copy;
 
 static const struct vd_lavc_hwdec *const hwdec_list[] = {
 #if HAVE_VDPAU_HWACCEL
@@ -436,12 +436,6 @@ static void uninit_avctx(struct dec_video *vd)
     vd_ffmpeg_ctx *ctx = vd->priv;
     AVCodecContext *avctx = ctx->avctx;
 
-    if (avctx && avcodec_is_open(avctx))
-        avcodec_flush_buffers(avctx);
-
-    if (ctx->hwdec && ctx->hwdec->uninit)
-        ctx->hwdec->uninit(ctx);
-
     if (avctx) {
         if (avctx->codec && avcodec_close(avctx) < 0)
             MP_ERR(vd, "Could not close codec.\n");
@@ -449,6 +443,9 @@ static void uninit_avctx(struct dec_video *vd)
         av_freep(&avctx->extradata);
         av_freep(&avctx->slice_offset);
     }
+
+    if (ctx->hwdec && ctx->hwdec->uninit)
+        ctx->hwdec->uninit(ctx);
 
     av_freep(&ctx->avctx);
 
