@@ -703,6 +703,16 @@ static int mp_property_disc_menu(void *ctx, struct m_property *prop,
     return m_property_flag_ro(action, arg, !!state);
 }
 
+static int mp_property_mouse_in_button(void *ctx, struct m_property *prop,
+                                       int action, void *arg)
+{
+    MPContext *mpctx = ctx;
+    int state = mp_nav_in_menu(mpctx);
+    if (state < 0)
+        return M_PROPERTY_UNAVAILABLE;
+    return m_property_flag_ro(action, arg, !!state);
+}
+
 /// Current chapter (RW)
 static int mp_property_chapter(void *ctx, struct m_property *prop,
                                int action, void *arg)
@@ -1384,6 +1394,29 @@ static int mp_property_demuxer_cache_duration(void *ctx, struct m_property *prop
     return m_property_double_ro(action, arg, s.ts_duration);
 }
 
+static int mp_property_demuxer_cache_ahead(void *ctx, struct m_property *prop,
+                                           int action, void *arg)
+{
+    MPContext *mpctx = ctx;
+    if (!mpctx->demuxer)
+        return M_PROPERTY_UNAVAILABLE;
+
+    struct demux_ctrl_reader_state s;
+    if (demux_control(mpctx->demuxer, DEMUXER_CTRL_GET_READER_STATE, &s) < 1)
+        return M_PROPERTY_UNAVAILABLE;
+
+    if (!s.eof && s.ts_range[1] == MP_NOPTS_VALUE)
+        return M_PROPERTY_UNAVAILABLE;
+    double ts = -1;
+    if (!s.eof) {
+        double time = get_current_time(mpctx);
+        if (time < 0)
+            return M_PROPERTY_UNAVAILABLE;
+        ts = s.ts_range[1] - time;
+    }
+    return m_property_double_ro(action, arg, ts);
+}
+
 static int mp_property_demuxer_cache_idle(void *ctx, struct m_property *prop,
                                           int action, void *arg)
 {
@@ -1930,6 +1963,26 @@ static int property_list_tracks(void *ctx, struct m_property *prop,
     }
     return m_property_read_list(action, arg, mpctx->num_tracks,
                                 get_track_entry, mpctx);
+}
+
+static int mp_property_audio_only(void *ctx, struct m_property *prop,
+                                    int action, void *arg)
+{
+    MPContext *mpctx = ctx;
+    int ret = 0;
+    if (mpctx->num_tracks > 0) {
+        ret = 1;
+        for (int n = 0; n < mpctx->num_tracks; n++) {
+            struct track *track = mpctx->tracks[n];
+            if (track->type == STREAM_AUDIO)
+                continue;
+            if (track->type == STREAM_VIDEO && track->attached_picture)
+                continue;
+            ret = 0;
+            break;
+        }
+    }
+    return m_property_flag_ro(action, arg, ret);
 }
 
 /// Selected audio id (RW)
@@ -3342,6 +3395,7 @@ static const struct m_property mp_properties[] = {
     {"playback-time", mp_property_playback_time},
     {"disc-title", mp_property_disc_title},
     {"disc-menu-active", mp_property_disc_menu},
+    {"disc-mouse-in-button", mp_property_mouse_in_button},
     {"chapter", mp_property_chapter},
     {"edition", mp_property_edition},
     {"disc-titles", mp_property_disc_titles},
@@ -3363,6 +3417,7 @@ static const struct m_property mp_properties[] = {
     {"cache-size", mp_property_cache_size},
     {"cache-idle", mp_property_cache_idle},
     {"demuxer-cache-duration", mp_property_demuxer_cache_duration},
+    {"demuxer-cache-ahead", mp_property_demuxer_cache_ahead},
     {"demuxer-cache-idle", mp_property_demuxer_cache_idle},
     {"cache-buffering-state", mp_property_cache_buffering},
     {"paused-for-cache", mp_property_paused_for_cache},
@@ -3391,6 +3446,7 @@ static const struct m_property mp_properties[] = {
     {"audio-bitrate", mp_property_audio_bitrate},
     {"audio-samplerate", mp_property_samplerate},
     {"audio-channels", mp_property_channels},
+    {"audio-only", mp_property_audio_only},
     {"aid", mp_property_audio},
     {"balance", mp_property_balance},
     {"volume-restore-data", mp_property_volrestore},
@@ -3525,7 +3581,7 @@ static const char *const *const mp_event_property_change[] = {
     E(MPV_EVENT_END_FILE, "*"),
     E(MPV_EVENT_FILE_LOADED, "*"),
     E(MP_EVENT_CHANGE_ALL, "*"),
-    E(MPV_EVENT_TRACKS_CHANGED, "track-list"),
+    E(MPV_EVENT_TRACKS_CHANGED, "track-list", "audio-only"),
     E(MPV_EVENT_TRACK_SWITCHED, "vid", "video", "aid", "audio", "sid", "sub",
       "secondary-sid"),
     E(MPV_EVENT_IDLE, "*"),
@@ -3533,7 +3589,8 @@ static const char *const *const mp_event_property_change[] = {
     E(MPV_EVENT_UNPAUSE, "pause", "paused-on-cache", "core-idle", "eof-reached"),
     E(MPV_EVENT_TICK, "time-pos", "stream-pos", "stream-time-pos", "avsync",
       "percent-pos", "time-remaining", "playtime-remaining", "playback-time",
-      "estimated-vf-fps"),
+      "estimated-vf-fps", "drop-frame-count", "vo-drop-frame-count",
+      "total-avsync-change"),
     E(MPV_EVENT_VIDEO_RECONFIG, "video-out-params", "video-params",
       "video-format", "video-codec", "video-bitrate", "dwidth", "dheight",
       "width", "height", "fps", "aspect", "vo-configured", "current-vo",
@@ -3546,7 +3603,9 @@ static const char *const *const mp_event_property_change[] = {
     E(MPV_EVENT_METADATA_UPDATE, "metadata", "filtered-metadata"),
     E(MPV_EVENT_CHAPTER_CHANGE, "chapter", "chapter-metadata"),
     E(MP_EVENT_CACHE_UPDATE, "cache", "cache-free", "cache-used", "cache-idle",
-      "demuxer-cache-duration", "demuxer-cache-idle", "paused-for-cache"),
+      "demuxer-cache-duration", "demuxer-cache-idle", "paused-for-cache",
+      "demuxer-cache-ahead"
+    ),
     E(MP_EVENT_WIN_RESIZE, "window-scale"),
     E(MP_EVENT_WIN_STATE, "window-minimized", "display-names"),
     E(MP_EVENT_AUDIO_DEVICES, "audio-device-list"),
@@ -4155,7 +4214,23 @@ static bool check_property_autorepeat(char *property,  struct MPContext *mpctx)
     return true;
 }
 
-int run_command(MPContext *mpctx, mp_cmd_t *cmd)
+static struct mpv_node *add_map_entry(struct mpv_node *dst, const char *key)
+{
+    struct mpv_node_list *list = dst->u.list;
+    assert(dst->format == MPV_FORMAT_NODE_MAP && dst->u.list);
+    MP_TARRAY_GROW(list, list->values, list->num);
+    MP_TARRAY_GROW(list, list->keys, list->num);
+    list->keys[list->num] = talloc_strdup(list, key);
+    return &list->values[list->num++];
+}
+
+#define ADD_MAP_INT(dst, name, i) (*add_map_entry(dst, name) = \
+    (struct mpv_node){ .format = MPV_FORMAT_INT64, .u.int64 = (i) });
+
+#define ADD_MAP_CSTR(dst, name, s) (*add_map_entry(dst, name) = \
+    (struct mpv_node){ .format = MPV_FORMAT_STRING, .u.string = (s) });
+
+int run_command(struct MPContext *mpctx, struct mp_cmd *cmd, struct mpv_node *res)
 {
     struct command_ctx *cmdctx = mpctx->command_ctx;
     struct MPOpts *opts = mpctx->opts;
@@ -4662,6 +4737,29 @@ int run_command(MPContext *mpctx, mp_cmd_t *cmd)
         screenshot_to_file(mpctx, cmd->args[0].v.s, cmd->args[1].v.i, msg_osd);
         break;
 
+    case MP_CMD_SCREENSHOT_RAW: {
+        if (!res)
+            return -1;
+        struct mp_image *img = screenshot_get_rgb(mpctx, cmd->args[0].v.i);
+        if (!img)
+            return -1;
+        struct mpv_node_list *info = talloc_zero(NULL, struct mpv_node_list);
+        talloc_steal(info, img);
+        *res = (mpv_node){ .format = MPV_FORMAT_NODE_MAP, .u.list = info };
+        ADD_MAP_INT(res, "w", img->w);
+        ADD_MAP_INT(res, "h", img->h);
+        ADD_MAP_INT(res, "stride", img->stride[0]);
+        ADD_MAP_CSTR(res, "format", "bgr0");
+        struct mpv_byte_array *ba = talloc_ptrtype(info, ba);
+        *ba = (struct mpv_byte_array){
+            .data = img->planes[0],
+            .size = img->stride[0] * img->h,
+        };
+        *add_map_entry(res, "data") =
+            (struct mpv_node){.format = MPV_FORMAT_BYTE_ARRAY, .u.ba = ba,};
+        break;
+    }
+
     case MP_CMD_RUN: {
         char *args[MP_CMD_MAX_ARGS + 1] = {0};
         for (int n = 0; n < cmd->nargs; n++)
@@ -4802,7 +4900,7 @@ int run_command(MPContext *mpctx, mp_cmd_t *cmd)
 
     case MP_CMD_COMMAND_LIST: {
         for (struct mp_cmd *sub = cmd->args[0].v.p; sub; sub = sub->queue_next)
-            run_command(mpctx, sub);
+            run_command(mpctx, sub, NULL);
         break;
     }
 

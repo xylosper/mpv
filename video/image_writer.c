@@ -50,6 +50,7 @@ const struct image_writer_opts image_writer_opts_defaults = {
     .jpeg_dpi = 72,
     .jpeg_progressive = 0,
     .jpeg_baseline = 1,
+    .tag_csp = 1,
 };
 
 #define OPT_BASE_STRUCT struct image_writer_opts
@@ -65,6 +66,7 @@ const struct m_sub_options image_writer_conf = {
         OPT_INTRANGE("png-compression", png_compression, 0, 0, 9),
         OPT_INTRANGE("png-filter", png_filter, 0, 0, 5),
         OPT_STRING("format", format, 0),
+        OPT_FLAG("tag-colorspace", tag_csp, 0),
         {0},
     },
     .size = sizeof(struct image_writer_opts),
@@ -79,14 +81,14 @@ struct image_writer_ctx {
 
 struct img_writer {
     const char *file_ext;
-    int (*write)(struct image_writer_ctx *ctx, mp_image_t *image, FILE *fp);
+    bool (*write)(struct image_writer_ctx *ctx, mp_image_t *image, FILE *fp);
     const int *pixfmts;
     int lavc_codec;
 };
 
-static int write_lavc(struct image_writer_ctx *ctx, mp_image_t *image, FILE *fp)
+static bool write_lavc(struct image_writer_ctx *ctx, mp_image_t *image, FILE *fp)
 {
-    int success = 0;
+    bool success = 0;
     AVFrame *pic = NULL;
     AVPacket pkt = {0};
     int got_output = 0;
@@ -131,6 +133,10 @@ static int write_lavc(struct image_writer_ctx *ctx, mp_image_t *image, FILE *fp)
     pic->format = avctx->pix_fmt;
     pic->width = avctx->width;
     pic->height = avctx->height;
+    if (ctx->opts->tag_csp) {
+        pic->color_primaries = mp_csp_prim_to_avcol_pri(image->params.primaries);
+        pic->color_trc = mp_csp_trc_to_avcol_trc(image->params.gamma);
+    }
     int ret = avcodec_encode_video2(avctx, &pkt, pic, &got_output);
     if (ret < 0)
         goto error_exit;
@@ -158,7 +164,7 @@ static void write_jpeg_error_exit(j_common_ptr cinfo)
   longjmp(*(jmp_buf*)cinfo->client_data, 1);
 }
 
-static int write_jpeg(struct image_writer_ctx *ctx, mp_image_t *image, FILE *fp)
+static bool write_jpeg(struct image_writer_ctx *ctx, mp_image_t *image, FILE *fp)
 {
     struct jpeg_compress_struct cinfo;
     struct jpeg_error_mgr jerr;
@@ -170,7 +176,7 @@ static int write_jpeg(struct image_writer_ctx *ctx, mp_image_t *image, FILE *fp)
     cinfo.client_data = &error_return_jmpbuf;
     if (setjmp(cinfo.client_data)) {
         jpeg_destroy_compress(&cinfo);
-        return 0;
+        return false;
     }
 
     jpeg_create_compress(&cinfo);
@@ -210,7 +216,7 @@ static int write_jpeg(struct image_writer_ctx *ctx, mp_image_t *image, FILE *fp)
 
     jpeg_destroy_compress(&cinfo);
 
-    return 1;
+    return true;
 }
 
 #endif
@@ -260,15 +266,38 @@ const char *image_writer_file_ext(const struct image_writer_opts *opts)
     return get_writer(opts)->file_ext;
 }
 
-int write_image(struct mp_image *image, const struct image_writer_opts *opts,
-                const char *filename, struct mp_log *log)
+struct mp_image *convert_image(struct mp_image *image, int destfmt,
+                               struct mp_log *log)
 {
-    struct mp_image *allocated_image = NULL;
-    struct image_writer_opts defs = image_writer_opts_defaults;
     int d_w = image->params.d_w;
     int d_h = image->params.d_h;
     bool is_anamorphic = image->w != d_w || image->h != d_h;
 
+    // Caveat: no colorspace/levels conversion done if pixel formats equal
+    //         it's unclear what colorspace/levels the target wants
+    if (image->imgfmt == destfmt && !is_anamorphic)
+        return mp_image_new_ref(image);
+
+    struct mp_image *dst = mp_image_alloc(destfmt, d_w, d_h);
+    if (!dst) {
+        mp_err(log, "Out of memory.\n");
+        return NULL;
+    }
+    mp_image_copy_attributes(dst, image);
+
+    if (mp_image_swscale(dst, image, mp_sws_hq_flags) < 0) {
+        mp_err(log, "Error when converting image.\n");
+        talloc_free(dst);
+        return NULL;
+    }
+
+    return dst;
+}
+
+bool write_image(struct mp_image *image, const struct image_writer_opts *opts,
+                const char *filename, struct mp_log *log)
+{
+    struct image_writer_opts defs = image_writer_opts_defaults;
     if (!opts)
         opts = &defs;
 
@@ -286,28 +315,12 @@ int write_image(struct mp_image *image, const struct image_writer_opts *opts,
         }
     }
 
-    // Caveat: no colorspace/levels conversion done if pixel formats equal
-    //         it's unclear what colorspace/levels the target wants
-    if (image->imgfmt != destfmt || is_anamorphic) {
-        struct mp_image *dst = mp_image_alloc(destfmt, d_w, d_h);
-        if (!dst) {
-            mp_err(log, "Out of memory.\n");
-            return 0;
-        }
-        mp_image_copy_attributes(dst, image);
-
-        if (mp_image_swscale(dst, image, mp_sws_hq_flags) < 0) {
-            mp_err(log, "Error when converting image.\n");
-            talloc_free(dst);
-            return 0;
-        }
-
-        allocated_image = dst;
-        image = dst;
-    }
+    struct mp_image *dst = convert_image(image, destfmt, log);
+    if (!dst)
+        return false;
 
     FILE *fp = fopen(filename, "wb");
-    int success = 0;
+    bool success = false;
     if (fp == NULL) {
         mp_err(log, "Error opening '%s' for writing!\n", filename);
     } else {
@@ -317,8 +330,7 @@ int write_image(struct mp_image *image, const struct image_writer_opts *opts,
             mp_err(log, "Error writing file '%s'!\n", filename);
     }
 
-    talloc_free(allocated_image);
-
+    talloc_free(dst);
     return success;
 }
 

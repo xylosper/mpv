@@ -855,6 +855,9 @@ static void pushnode(lua_State *L, mpv_node *node)
             lua_rawset(L, -3);
         }
         break;
+    case MPV_FORMAT_BYTE_ARRAY:
+        lua_pushlstring(L, node->u.ba->data, node->u.ba->size);
+        break;
     default:
         // unknown value - what do we do?
         // for now, set a unique dummy value
@@ -969,6 +972,17 @@ static int script_get_screen_size(lua_State *L)
     lua_pushnumber(L, vo_res.h);
     lua_pushnumber(L, aspect);
     return 3;
+}
+
+static int script_get_screen_margins(lua_State *L)
+{
+    struct MPContext *mpctx = get_mpctx(L);
+    struct mp_osd_res vo_res = osd_get_vo_res(mpctx->osd, OSDTYPE_EXTERNAL);
+    lua_pushnumber(L, vo_res.ml);
+    lua_pushnumber(L, vo_res.mt);
+    lua_pushnumber(L, vo_res.mr);
+    lua_pushnumber(L, vo_res.mb);
+    return 4;
 }
 
 static int script_get_mouse_pos(lua_State *L)
@@ -1280,6 +1294,7 @@ static const struct fn_entry main_fns[] = {
     FN_ENTRY(set_osd_ass),
     FN_ENTRY(get_osd_resolution),
     FN_ENTRY(get_screen_size),
+    FN_ENTRY(get_screen_margins),
     FN_ENTRY(get_mouse_pos),
     FN_ENTRY(get_time),
     FN_ENTRY(input_define_section),

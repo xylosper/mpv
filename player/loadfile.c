@@ -1019,6 +1019,7 @@ static void play_current_file(struct MPContext *mpctx)
     mpctx->last_chapter = -2;
     mpctx->paused = false;
     mpctx->paused_for_cache = false;
+    mpctx->cache_eof = false;
     mpctx->playing_msg_shown = false;
     mpctx->backstep_active = false;
     mpctx->max_frames = -1;
@@ -1112,10 +1113,13 @@ goto_reopen_demuxer: ;
     load_timeline(mpctx);
 
     if (mpctx->demuxer->playlist) {
-        int entry_stream_flags =
-            (mpctx->demuxer->stream->safe_origin ? 0 : STREAM_SAFE_ONLY) |
-            (mpctx->demuxer->stream->is_network ? STREAM_NETWORK_ONLY : 0);
         struct playlist *pl = mpctx->demuxer->playlist;
+        int entry_stream_flags = 0;
+        if (!pl->disable_safety) {
+            entry_stream_flags = STREAM_SAFE_ONLY;
+            if (mpctx->demuxer->stream->is_network)
+                entry_stream_flags |= STREAM_NETWORK_ONLY;
+        }
         for (struct playlist_entry *e = pl->first; e; e = e->next)
             e->stream_flags |= entry_stream_flags;
         transfer_playlist(mpctx, pl);

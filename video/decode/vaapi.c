@@ -90,6 +90,10 @@ static const struct hwdec_profile_entry profiles[] = {
     PE(WMV3,        VC1_ADVANCED,       VC1Advanced),
     PE(WMV3,        VC1_MAIN,           VC1Main),
     PE(WMV3,        VC1_SIMPLE,         VC1Simple),
+#if VA_CHECK_VERSION(0, 37, 0)
+    PE(HEVC,        HEVC_MAIN,          HEVCMain),
+    PE(HEVC,        HEVC_MAIN_10,       HEVCMain10),
+#endif
     {0}
 };
 
@@ -109,6 +113,10 @@ static const char *str_va_profile(VAProfile profile)
         PROFILE(VC1Simple);
         PROFILE(VC1Main);
         PROFILE(VC1Advanced);
+#if VA_CHECK_VERSION(0, 37, 0)
+        PROFILE(HEVCMain);
+        PROFILE(HEVCMain10);
+#endif
 #undef PROFILE
     }
     return "<unknown>";

@@ -68,7 +68,7 @@ void mp_process_input(struct MPContext *mpctx)
         mp_cmd_t *cmd = mp_input_read_cmd(mpctx->input);
         if (!cmd)
             break;
-        run_command(mpctx, cmd);
+        run_command(mpctx, cmd, NULL);
         mp_cmd_free(cmd);
         mp_dispatch_queue_process(mpctx->dispatch, 0);
     }
@@ -545,6 +545,11 @@ static void handle_pause_on_low_cache(struct MPContext *mpctx)
 
     struct demux_ctrl_reader_state s = {.idle = true, .ts_duration = -1};
     demux_control(mpctx->demuxer, DEMUXER_CTRL_GET_READER_STATE, &s);
+    
+    if (mpctx->cache_eof != s.eof) {
+        mpctx->cache_eof = s.eof;
+        mp_notify(mpctx, MP_EVENT_CACHE_UPDATE, NULL);
+    }
 
     if (mpctx->restart_complete && idle != -1) {
         if (mpctx->paused && mpctx->paused_for_cache) {

@@ -272,6 +272,31 @@ int mpv_opengl_cb_uninit_gl(struct mpv_opengl_cb_context *ctx)
     return 0;
 }
 
+int mpv_opengl_cb_render_osd(struct mpv_opengl_cb_context *ctx, 
+                             int w, int h, int ml, int mt, int mr, int mb, double dpar,
+                             void(*cb)(void*,struct sub_bitmaps*), void *octx)
+{
+    struct mp_osd_res res = { .w = w, .h = h, .ml = ml, .mt = mt, .mr = mr, .mb = mb, .display_par = dpar };
+    pthread_mutex_lock(&ctx->lock);
+    gl_video_render_osd(ctx->renderer, &res, cb, octx);
+    pthread_mutex_unlock(&ctx->lock);
+    return 0;
+}
+
+void mpv_opengl_cb_render_size(struct mpv_opengl_cb_context *ctx, int *w, int *h)
+{
+    pthread_mutex_lock(&ctx->lock);
+    struct mp_rect wnd = {0, 0, *w, *h};
+    struct mp_rect src, dst;
+    struct mp_osd_res osd;
+    mp_get_src_dst_rects(ctx->log, &ctx->vo_opts, 0,
+                         &ctx->img_params, wnd.x1 - wnd.x0, wnd.y1 - wnd.y0,
+                         1.0, &src, &dst, &osd);
+    pthread_mutex_unlock(&ctx->lock);
+    *w = dst.x1 - dst.x0;
+    *h = dst.y1 - dst.y0;
+}
+
 int mpv_opengl_cb_render(struct mpv_opengl_cb_context *ctx, int fbo, int vp[4])
 {
     assert(ctx->renderer);
@@ -341,8 +366,8 @@ int mpv_opengl_cb_render(struct mpv_opengl_cb_context *ctx, int fbo, int vp[4])
     pthread_mutex_unlock(&ctx->lock);
 
     if (mpi) {
-		if (mpi->frame_timing.pts > 0)
-			mpi->pts = mpi->frame_timing.pts * 1e-6;
+        if (mpi->frame_timing.pts > 0)
+            mpi->pts = mpi->frame_timing.pts * 1e-6;
         ctx->last_timing.pts = mpi->frame_timing.pts;
         ctx->last_timing.next_vsync = mpi->frame_timing.next_vsync;
         ctx->last_timing.prev_vsync = mpi->frame_timing.prev_vsync;
@@ -396,9 +421,11 @@ static void flip_page(struct vo *vo)
             frame_queue_drop_all(p->ctx);
         else // FRAME_DROP_POP mode
             frame_queue_shrink(p->ctx, p->frame_queue_size - 1);
-    }
-    frame_queue_push(p->ctx, p->ctx->waiting_frame);
-    p->ctx->waiting_frame = NULL;
+	}
+	if (p->ctx->waiting_frame) {
+		frame_queue_push(p->ctx, p->ctx->waiting_frame);
+		p->ctx->waiting_frame = NULL;
+	}
     update(p);
     pthread_mutex_unlock(&p->ctx->lock);
 }
